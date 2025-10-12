@@ -1,9 +1,11 @@
 import uuid
 from enum import Enum
+from typing import Type, TypeVar
 
-from reverb_base import *
+from reverb_kernel import *
 from reverb_errors import *
 
+T = TypeVar("T")
 
 class ReverbSide(Enum):
     SERVER = 1
@@ -18,40 +20,57 @@ def check_if_json_serializable(*args):
                 f"The arg: {arg} is not serializable ! It has to be serializable by JSON to be agree as a reverb_args.")
 
 class ReverbObject:
-    def __init__(self, pos=(0, 0), dir="N", *reverb_args, add_on_init=True):
-        self.dir = dir
-        self.pos = pos
+    def __init__(self, *reverb_args, uid=None, add_on_init=None, belonging_membership:int=None):
+        """
+        - Base class of all object connected to the Network
+        :param reverb_args: All the custom vars
+        :param uid: The uid of the object, let it on None if you are not sure of what you're doing here
+        :param add_on_init: When True the class will be added into the ReverbManager automatically
+        :param belonging_membership: This refers to the port of client. With this you can know if the RO is from a local instance or not. Let it on None if you're not sure what you're doing here
+        """
+        self.belonging_membership = belonging_membership
         self.reverb_args = reverb_args
-        self.uid: str = None
+        self.uid: str = uid
         self.type = self.__class__.__name__
-        ReverbManager.add_type_if_dont_exit(self)
 
         if add_on_init:
-            ReverbManager.add_new_reverb_object(self)
+            ReverbManager.add_new_reverb_object(self, self.uid)
 
     def pack(self):
         """
         :return: A list of all needed args that are linked between the server and the clients
         """
         check_if_json_serializable(*self.reverb_args)
-        return [self.type, list(self.pos), self.dir, *self.reverb_args]
+        return [self.type, self.belonging_membership, list(self.__dict__.values())[:len(self.reverb_args)]]
 
-    def sync(self, pos, dir, *reverb_args):
-        if ReverbManager.REVERB_SIDE == "CLIENT":
-            self.pos = pos
-            self.dir = dir
-            if reverb_args != ():
-                self.reverb_args = reverb_args
-                self.on_sync_reverb_args()
+    def sync(self, *reverb_args):
+        """
+        - Call on the Client to sync new ro data
+        - Know that values into reverb_args will be applied to variable along the position into the init
+        :param reverb_args: List of args
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
+            if len(self.reverb_args) != len(reverb_args):
+                raise ValueError(f"Length of argument in the class are not the same than the server send: "
+                                 f"expected {len(self.reverb_args)} got {len(reverb_args)}")
+            else:
+                if reverb_args != ():
+                    for key, val in zip(self.__dict__, reverb_args):
+                        setattr(self, key, val)
+                    self.reverb_args = reverb_args
+        else:
+            raise ReverbWrongSideError(ReverbManager.REVERB_SIDE.name)
+
+    def is_owner(self):
+        """
+        - Chek if the ReverbObject is membership of this client
+        - Only call on 'Client' side
+        :return:
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
+            return ReverbManager.REVERB_CONNECTION.client.getsockname()[1] == self.belonging_membership
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE)
-
-    def on_sync_reverb_args(self):
-        """
-        - Override this function to update your reverb_args.
-        - This is only call if you have reverb_args.
-        """
-        pass
 
     def compute_server(self, func, *args):
         """
@@ -68,6 +87,19 @@ class ReverbObject:
         """
         return self.uid is not None
 
+    def on_init_from_client(self):
+        """
+        - Call on 'Client' side
+        - Override this function
+        - Call when the object is creating on the 'Client' side
+        """
+
+    def on_init_from_server(self):
+        """
+        - Call on 'Server' side
+        - Override this function
+        - Call when the object is creating on the 'Server' side
+        """
 
 class ReverbManager:
     """
@@ -76,7 +108,7 @@ class ReverbManager:
     """
     REVERB_SIDE: ReverbSide = ReverbSide.SERVER
     REVERB_CONNECTION = None  # Client, or Server
-    REVERB_OBJECTS: dict[str:ReverbObject] = {}
+    REVERB_OBJECTS: dict[str, ReverbObject] = {}
     REVERB_OBJECT_REGISTRY = {"ReverbObject": ReverbObject}  # Register all type
 
     @staticmethod
@@ -88,20 +120,27 @@ class ReverbManager:
         print(f"{Back.YELLOW + Fore.RED}[{Fore.RESET}REVERB_MANAGER{Fore.RED}]{Style.RESET_ALL} {msg}")
 
     @staticmethod
-    def add_type_if_dont_exit(ro: ReverbObject):
+    def add_type_if_dont_exit(ro: type[ReverbObject]):
         try:
-            ReverbManager.REVERB_OBJECT_REGISTRY[ro.__class__.__name__]
+            ReverbManager.REVERB_OBJECT_REGISTRY[ro.__name__]
         except KeyError:
-            ReverbManager.REVERB_OBJECT_REGISTRY[ro.__class__.__name__] = ro.__class__
-            ReverbManager.print_manager(f"Adding type '{ro.__class__.__name__}' to the registry.")
+            ReverbManager.REVERB_OBJECT_REGISTRY[ro.__name__] = ro
+            ReverbManager.print_manager(f"Adding type '{ro.__name__}' to the registry.")
 
     @staticmethod
     def server_sync():
-        ros = {}
-        for uid, ro in ReverbManager.REVERB_OBJECTS.items():
-            ros[uid] = ro.pack()
+        """
+        - Call on 'SERVER' side
+        - Sync value from 'SERVER' to 'CLIENT' side
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+            ros = {}
+            for uid, ro in ReverbManager.REVERB_OBJECTS.items():
+                ros[uid] = ro.pack()
 
-        ReverbManager.REVERB_CONNECTION.send_to_all("server_sync", ros)
+            ReverbManager.REVERB_CONNECTION.send_to_all("server_sync", ros)
+        else:
+            raise ReverbWrongSideError(ReverbManager.REVERB_SIDE)
 
     @staticmethod
     def get_reverb_object(uid: str) -> ReverbObject:
@@ -116,11 +155,24 @@ class ReverbManager:
             raise ReverbObjectNotFoundError(uid)
 
     @staticmethod
-    def get_cls_by_type_name(t):
+    def get_cls_by_type_name(t: str):
         try:
             return ReverbManager.REVERB_OBJECT_REGISTRY[t]
         except KeyError:
             raise ReverbTypeNotFoundError(t)
+
+    @staticmethod
+    def get_all_ro_by_type(t:Type[T]) -> list[T]:
+        """
+        - Get all the ReverbObject by a type
+        :param t: Type of ReverbObject
+        :return: Return the list of all found same type into the ReverbManager
+        """
+        ros = []
+        for uid, ro in ReverbManager.REVERB_OBJECTS.items():
+            if isinstance(ro, t):
+                ros.append(ro)
+        return ros
 
     @staticmethod
     def add_new_reverb_object(ro: ReverbObject, uid: str = "Unknown"):
@@ -130,27 +182,29 @@ class ReverbManager:
         :param uid: The uid, can be let by default if you are on SERVER side
         """
         if ro not in ReverbManager.REVERB_OBJECTS.values():  # Check if the
-            if not ro.is_uid_init():  # Check if the RO is not init yet
                 if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:  # check RM side
-                    # SERVER
-                    uid = str(uuid.uuid4())
-                    ReverbManager.REVERB_OBJECTS[uid] = ro
+                    if not ro.is_uid_init():  # Check if the RO is not init yet
+                        # SERVER
+                        uid = str(uuid.uuid4())
+                        ReverbManager.REVERB_OBJECTS[uid] = ro
+                        ro.on_init_from_server()
+                    else:
+                        raise ReverbUIDAlreadyInitError(ro)
                 else:
                     # CLIENT
                     if uid is not None:
                         ReverbManager.REVERB_OBJECTS[uid] = ro
                     else:
                         raise ReverbUIDNoneError(uid)
-            else:
-                raise ReverbUIDAlreadyInitError(ro)
+                    ro.on_init_from_client()
         else:
             raise ReverbObjectAlreadyExistError(ro)
 
-        ReverbManager.print_manager(f"New ReverbObject add into '{ReverbManager.REVERB_SIDE}' side with uid={uid}")
+        ReverbManager.print_manager(f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}' side with uid={uid}")
 
     @staticmethod
     @client_event_registry.on_event("server_sync")
-    def on_server_sync(clt: socket.socket, ros: dict[str, list[object]], *args):
+    def on_server_sync(clt: socket.socket, ros: dict[str, list[list[object]]], *args):
         """
         - Called on the 'Client' side
         - Called when the server sync state of ReverbObject with clients
@@ -158,16 +212,14 @@ class ReverbManager:
         :param ros: Dict[uids:dict[var_names:values]]
         """
         for uid, ro_data in ros.items():
+            ro:ReverbObject = None
             try:  # try to get a reverb_object
                 ro = ReverbManager.get_reverb_object(uid)
-                ro_data.pop(0)
-                ro.sync(*ro_data)
             except ReverbObjectNotFoundError:  # create a new one
-                cls = ro_data[0]
-                cls = ReverbManager.get_cls_by_type_name(cls)
-                ro_data.pop(0)
-                ro = cls(*ro_data)
-                ro.sync(*ro_data)
+                t:str = ro_data[0]
+                cls = ReverbManager.get_cls_by_type_name(t)
+                ro = cls(*ro_data[:2], belonging_membership=ro_data[1], uid=uid)
+            ro.sync(*ro_data[2:][0])
 
     @staticmethod
     @server_event_registry.on_event("calling_server_computing")
@@ -189,3 +241,20 @@ class ReverbManager:
                 func(*args)
         except AttributeError:
             raise NameError(f"The {func_name=} wasn't found into the ReverbObject!")
+
+    @staticmethod
+    def reverb_object_attribute(cls):
+        """
+        - Decorator of a ReverbObject class and add the type if
+        :param cls: The class
+        :return: cls
+        """
+        if issubclass(cls, ReverbObject):
+            ReverbManager.add_type_if_dont_exit(cls)
+        else:
+            raise TypeError(f"The class {cls} must be derivative from a ReverbObject!")
+        return cls
+
+
+
+

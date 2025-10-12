@@ -1,8 +1,8 @@
 import json
 import socket
+import struct
 import threading
 from json import JSONDecodeError
-from urllib.request import parse_keqv_list
 from warnings import warn
 
 from colorama import Fore, Back, Style
@@ -46,7 +46,6 @@ class EventRegistry:
         """
         handlers = self._events.get(event_name, [])  # Check if the event name contain functions or not
         if handlers:
-            print("oergehr")
             for handler in handlers:
                 try:
                     threading.Thread(target=handler, args=(sock, *args), daemon=True).start()
@@ -55,7 +54,6 @@ class EventRegistry:
         else:
             warn(f"The handler for '{event_name}' is not found ! It may be normal, ignore then.")
 
-        print("FINISHED TRIGGER")
 
     def all_events(self):
         """
@@ -80,6 +78,16 @@ class Packet:
         return json.dumps({"name": name, "contents": content}).encode()
 
     @staticmethod
+    def recv_exact(sock:socket.socket, n:int):
+        data = b""
+        while len(data) < n:
+            chunk = sock.recv(n - len(data))
+            if not chunk:
+                raise ConnectionError("The socket is close...")
+            data += chunk
+        return data
+
+    @staticmethod
     def decode_packet(packet: bytes):
         """
         Decode the packet from a bytes
@@ -90,14 +98,18 @@ class Packet:
             decoded_packet = json.loads(packet.decode())
             return decoded_packet["name"], decoded_packet["contents"]
         except JSONDecodeError:
-            print(f"An error occurred with this packet: {packet.decode()}")
+            warn(f"An error occurred with this packet: {packet.decode()}")
         except KeyError:
-            print(f"The packet is not valid ! A valid packet must have a 'name' and a 'contents' argument !")
+            warn(f"The packet is not valid ! A valid packet must have a 'name' and a 'contents' argument !")
 
 
 class Client:
-    def __init__(self, ip="127.0.0.1", port=8080, buffer_size=1024):
-        self.buffer_size = buffer_size
+    def __init__(self, ip="127.0.0.1", port=8080):
+        """
+        - A class that connect to a Server
+        :param ip: Ip server's
+        :param port: Port server's
+        """
         self.port = port
         self.ip = ip
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -113,7 +125,6 @@ class Client:
 
             threading.Thread(target=self.listen, daemon=True).start()
             client_event_registry.trigger("connection", self.client) # Trigger connection event
-            print("OK")
         except ConnectionRefusedError:
             Client.print_client("The server is unreachable !")
         except socket.gaierror:
@@ -128,8 +139,9 @@ class Client:
         try:
             while self.is_connected:
                 try:
-                    packet = self.client.recv(self.buffer_size)
-                    print("OKKKKKKK:", packet)
+                    raw_len = Packet.recv_exact(self.client, 4) # Get the length of the packet
+                    length = struct.unpack("!I", raw_len)[0]
+                    packet = Packet.recv_exact(self.client, length)
                     if packet:
                         packet_name, contents = Packet.decode_packet(packet)
                         if packet_name == "server_stop":
@@ -151,8 +163,11 @@ class Client:
         :param content: contents
         """
         if self.is_connected:
+
             packet = Packet.create_packet(packet_name, *content)
-            self.client.send(packet)
+            length = len(packet)
+            header = struct.pack('!I', length)
+            self.client.send(header + packet)
 
     def disconnect(self):
         """
@@ -177,8 +192,12 @@ class Client:
 
 
 class Server:
-    def __init__(self, host="", port=8080, buffer_size=1024):
-        self.buffer_size = buffer_size
+    def __init__(self, host="", port=8080):
+        """
+        - A class that open a Server
+        :param host: The ip. Let it him by default
+        :param port: The listen port!
+        """
         self.host = host
         self.port = port
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -239,7 +258,9 @@ class Server:
         try:
             while self.is_online:
                 try:
-                    packet = client_socket.recv(self.buffer_size)
+                    raw_len = Packet.recv_exact(client_socket, 4)  # Get the length of the packet
+                    length = struct.unpack("!I", raw_len)[0]
+                    packet = Packet.recv_exact(client_socket, length)
                     if packet:
                         packet_name, contents = Packet.decode_packet(packet)
                         server_event_registry.trigger(packet_name, client_socket, *contents)
@@ -264,14 +285,18 @@ class Server:
         :param contents: Contents
         """
         packet = Packet.create_packet(packet_name, *contents)
+        length = len(packet)
+        header = struct.pack('!I', length)
         for client in self.clients.values():
-            client.sendall(packet)
+            client.sendall(header + packet)
 
 
     @staticmethod
     def send_to(clt:socket.socket, packet_name, *contents):
         packet = Packet.create_packet(packet_name, *contents)
-        clt.sendall(packet)
+        length = len(packet)
+        header = struct.pack('!I', length)
+        clt.sendall(header + packet)
 
 # Basic Event Registry
 
