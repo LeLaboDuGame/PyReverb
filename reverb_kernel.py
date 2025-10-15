@@ -2,6 +2,7 @@ import json
 import socket
 import struct
 import threading
+import time
 from json import JSONDecodeError
 from warnings import warn
 
@@ -38,19 +39,26 @@ class EventRegistry:
         """
         return self._events.get(event_name)
 
-    def trigger(self, event_name, sock, *args):
+    def trigger(self, event_name, sock, *args, threading_event=True):
         """
         Trigger an event
         :param sock: the reference of the outcoming socket packet's
         :param event_name: The name of the event
+        :param threading_event: If true it will handle the event into a new thread else it will just execute the event into the main thread
         """
         handlers = self._events.get(event_name, [])  # Check if the event name contain functions or not
         if handlers:
             for handler in handlers:
                 try:
-                    threading.Thread(target=handler, args=(sock, *args), daemon=True).start()
+                    if threading_event:
+                        threading.Thread(target=handler, args=(sock, *args), daemon=True).start()
+                    else:
+                        handler(sock, *args)
                 except TypeError:
-                    threading.Thread(target=handler, args=sock, daemon=True).start()
+                    if threading_event:
+                        threading.Thread(target=handler, args=sock, daemon=True).start()
+                    else:
+                        handler(sock)
         else:
             warn(f"The handler for '{event_name}' is not found ! It may be normal, ignore then.")
 
@@ -177,7 +185,6 @@ class Client:
             try:
                 self.send("client_disconnection", self.client.getpeername())
             finally:
-                self.client.close()
                 self.is_connected = False
                 client_event_registry.trigger("disconnection", self.client)
                 Client.print_client("Client close and disconnect from the server !")
@@ -263,9 +270,10 @@ class Server:
                     packet = Packet.recv_exact(client_socket, length)
                     if packet:
                         packet_name, contents = Packet.decode_packet(packet)
-                        server_event_registry.trigger(packet_name, client_socket, *contents)
                         if packet_name == "client_disconnection":
                             break
+                        else:
+                            server_event_registry.trigger(packet_name, client_socket, *contents)
                     else:
                         Server.print_server(f"A packet from: {addr} has been send with no data ! This is illegal closing the listening thread and the communication !")
                         break
@@ -273,6 +281,8 @@ class Server:
                     Server.print_server(f"The client at add: {addr} has been disconnected ! This is an anomaly.")
                     break
         finally:
+            server_event_registry.trigger(packet_name, client_socket, *contents,
+                                          threading_event=False)
             if addr in self.clients:
                 self.clients.pop(addr)
             client_socket.close()
