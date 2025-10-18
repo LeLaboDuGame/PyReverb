@@ -1,4 +1,4 @@
-import socket
+import threading
 import uuid
 from enum import Enum
 from typing import Type, TypeVar
@@ -7,6 +7,13 @@ from reverb_kernel import *
 from reverb_errors import *
 
 T = TypeVar("T")
+
+VERBOSE=2
+"""
+- 2: Full verbose
+- 1: Only some things
+- 0: Stop verbosing
+"""
 
 class ReverbSide(Enum):
     SERVER = 1
@@ -21,21 +28,18 @@ def check_if_json_serializable(*args):
                 f"The arg: {arg} is not serializable ! It has to be serializable by JSON to be agree as a reverb_args.")
 
 class ReverbObject:
-    def __init__(self, *reverb_args, uid:str="Unknow", add_on_init:bool=True, belonging_membership:int=None):
+    def __init__(self, *reverb_args, uid:str="Unknown", belonging_membership:int=None):
         """
         - Base class of all object connected to the Network
         :param reverb_args: All the custom vars
         :param uid: The uid of the object, let it on None if you are not sure of what you're doing here
-        :param add_on_init: When True the ReverbObject will be added into the ReverbManager automatically
         :param belonging_membership: This refers to the port of client. With this you can know if the RO is from a local instance or not. Let it on None if you're not sure what you're doing here
         """
         self.belonging_membership = belonging_membership
         self.reverb_args = reverb_args
         self.uid: str = uid
+        self.is_alive = True
         self.type = self.__class__.__name__
-
-        if add_on_init:
-            ReverbManager.add_new_reverb_object(self, self.uid)
 
     def pack(self):
         """
@@ -88,13 +92,14 @@ class ReverbObject:
         :param func: The server function reference. Has to be into the Class
         :param args: Args of the function
         """
-        ReverbManager.REVERB_CONNECTION.send("calling_server_computing", self.uid, func.__name__, *args)
+        if self.is_alive:
+            ReverbManager.REVERB_CONNECTION.send("calling_server_computing", self.uid, func.__name__, *args)
 
     def is_uid_init(self):
         """
         :return: if uid is init or not
         """
-        return self.uid is not "Unknow"
+        return self.uid != "Unknown"
 
     def on_init_from_client(self):
         """
@@ -125,7 +130,8 @@ class ReverbObject:
         """
 
     def __del__(self):
-        ReverbObject.print_object(f"Destroying the object {self.uid=}")
+        if VERBOSE == 2:
+            ReverbObject.print_object(f"Destroying the object {self.uid=}")
 
 class ReverbManager:
     """
@@ -143,7 +149,8 @@ class ReverbManager:
         - Print a message with the ReverbManager style
         :param msg: The message
         """
-        print(f"{Back.YELLOW + Fore.RED}[{Fore.RESET}REVERB_MANAGER{Fore.RED}]{Style.RESET_ALL} {msg}")
+        if VERBOSE != 0:
+            print(f"{Back.YELLOW + Fore.RED}[{Fore.RESET}REVERB_MANAGER{Fore.RED}]{Style.RESET_ALL} {msg}")
 
     @staticmethod
     def add_type_if_dont_exit(ro: type[ReverbObject]):
@@ -151,7 +158,8 @@ class ReverbManager:
             ReverbManager.REVERB_OBJECT_REGISTRY[ro.__name__]
         except KeyError:
             ReverbManager.REVERB_OBJECT_REGISTRY[ro.__name__] = ro
-            ReverbManager.print_manager(f"Adding type '{ro.__name__}' to the registry.")
+            if VERBOSE >= 1:
+                ReverbManager.print_manager(f"Adding type '{ro.__name__}' to the registry.")
 
     @staticmethod
     def server_sync():
@@ -162,7 +170,8 @@ class ReverbManager:
         if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
             ros = {}
             for uid, ro in ReverbManager.REVERB_OBJECTS.items():
-                ros[uid] = ro.pack()
+                if ro != "DESTROYED":
+                    ros[uid] = ro.pack()
 
             ReverbManager.REVERB_CONNECTION.send_to_all("server_sync", ros)
         else:
@@ -196,38 +205,38 @@ class ReverbManager:
         """
         ros = []
         for uid, ro in ReverbManager.REVERB_OBJECTS.items():
-            if isinstance(ro, t):
-                ros.append(ro)
+            if ro != "DESTROYED":
+                if isinstance(ro, t):
+                    ros.append(ro)
         return ros
 
     @staticmethod
-    def add_new_reverb_object(ro: ReverbObject, uid: str = "Unknown"):
+    def add_new_reverb_object(ro: ReverbObject):
         """
         - Add a new ReverbObject to the ReverbManager
         :param ro: The ReverbObject
-        :param uid: The uid, can be let by default if you are on SERVER side
         """
         if ro not in ReverbManager.REVERB_OBJECTS.values():  # Check if the
-                if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:  # check RM side
-                    if not ro.is_uid_init():  # Check if the RO is not init yet
-                        # SERVER
-                        uid = str(uuid.uuid4())
-                        ReverbManager.REVERB_OBJECTS[uid] = ro
-                        ro.uid = uid
-                        ro.on_init_from_server()
-                    else:
-                        raise ReverbUIDAlreadyInitError(ro)
+            if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:  # check RM side
+                if not ro.is_uid_init():  # Check if the RO is not init yet
+                    # SERVER
+                    uid = str(uuid.uuid4())
+                    ReverbManager.REVERB_OBJECTS[uid] = ro
+                    ro.uid = uid
+                    threading.Thread(target=ro.on_init_from_server, daemon=True).start()
                 else:
-                    # CLIENT
-                    if uid is not "Unknow":
-                        ReverbManager.REVERB_OBJECTS[uid] = ro
-                    else:
-                        raise ReverbUIDNoneError(uid)
-                    ro.on_init_from_client()
+                    raise ReverbUIDAlreadyInitError(ro, ro.uid)
+            else:
+                # CLIENT
+                if ro.is_uid_init():
+                    ReverbManager.REVERB_OBJECTS[ro.uid] = ro
+                else:
+                    raise ReverbUIDUnknownError()
+                threading.Thread(target=ro.on_init_from_client, daemon=True).start()
         else:
             raise ReverbObjectAlreadyExistError(ro)
-
-        ReverbManager.print_manager(f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}' side with uid={uid}")
+        if VERBOSE == 2:
+            ReverbManager.print_manager(f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}' side with uid={ro.uid}")
 
     @staticmethod
     def remove_reverb_object(uid:str):
@@ -238,12 +247,16 @@ class ReverbManager:
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
             try:
-                ro: ReverbObject = ReverbManager.REVERB_OBJECTS[uid]
-                ro.on_destroy_from_server()
-                ro.__del__()
-                ReverbManager.REVERB_OBJECTS.pop(uid)
+                ro: ReverbObject = ReverbManager.get_reverb_object(uid)
+                ro.is_alive = False
+
+                threading.Thread(target=ro.on_destroy_from_server, daemon=True).start()
+                ReverbManager.REVERB_OBJECTS[uid] = "DESTROYED"
+                f = lambda: (time.sleep(3), ReverbManager.REVERB_OBJECTS.pop(uid)) # Remove the ro 3 sec after on the server to avoid syncing bugs
+                threading.Thread(target=f, daemon=True).start()
             except KeyError:
                 raise KeyError(f"The {uid=} is not found !")
+
             ReverbManager.REVERB_CONNECTION.send_to_all("remove_ro", uid)
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE)
@@ -258,13 +271,10 @@ class ReverbManager:
         :param uid: The uid of the ReverbObject to delete
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
-            try:
-                ro:ReverbObject = ReverbManager.REVERB_OBJECTS[uid]
-                ro.on_destroy_from_client()
-                ro.__del__()
-                ReverbManager.REVERB_OBJECTS.pop(uid)
-            except KeyError:
-                raise KeyError(f"The server send a packet to remove a ro but the ro with the {uid=} is not found!")
+            ro:ReverbObject = ReverbManager.get_reverb_object(uid)
+            ro.is_alive = False
+            ReverbManager.REVERB_OBJECTS.pop(uid)
+            threading.Thread(target=ro.on_destroy_from_client(), daemon=True).start()
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE)
 
@@ -285,7 +295,13 @@ class ReverbManager:
             except ReverbObjectNotFoundError:  # create a new one
                 t:str = ro_data[0]
                 cls = ReverbManager.get_cls_by_type_name(t)
-                ro = cls(*ro_data[:2], belonging_membership=ro_data[1], uid=uid)
+                args = ro_data[2]
+                try:
+                    ro = cls(*args, belonging_membership=ro_data[1])
+                except TypeError:
+                    raise TypeError(f"Not enough param passed! You try to construct {cls} but those elements are passed {args}, {ro_data}")
+                ro.uid = uid
+                ReverbManager.add_new_reverb_object(ro)
             ro.sync(*ro_data[2:][0])
 
     @staticmethod
@@ -299,7 +315,17 @@ class ReverbManager:
         :param func_name: The function name
         :param args: Params of the function
         """
-        ro = ReverbManager.get_reverb_object(uid)
+        try:
+            ro = ReverbManager.get_reverb_object(uid)
+            if ro == "DESTROYED":
+                return
+        except ReverbObjectNotFoundError:
+            warn(f"You try to compute on the server with a uid not found {uid=}.\n"
+                                        f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast! or just because the uid is real2"
+                                        f"ly not found!")
+            return
+
+
         try:
             func = getattr(ro, func_name)
             if args == ():

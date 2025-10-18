@@ -278,7 +278,7 @@ class Server:
                         Server.print_server(f"A packet from: {addr} has been send with no data ! This is illegal closing the listening thread and the communication !")
                         break
                 except ConnectionResetError:
-                    Server.print_server(f"The client at add: {addr} has been disconnected ! This is an anomaly.")
+                    Server.print_server(f"The client at address: {addr} has been disconnected ! This is an anomaly.")
                     break
         finally:
             server_event_registry.trigger(packet_name, client_socket, *contents,
@@ -298,7 +298,10 @@ class Server:
         length = len(packet)
         header = struct.pack('!I', length)
         for client in self.clients.values():
-            client.sendall(header + packet)
+            try:
+                client.sendall(header + packet)
+            except BrokenPipeError:
+                warn(f"The client was disconnect during a sending operation: {client.getpeername()}")
 
 
     @staticmethod
@@ -306,7 +309,10 @@ class Server:
         packet = Packet.create_packet(packet_name, *contents)
         length = len(packet)
         header = struct.pack('!I', length)
-        clt.sendall(header + packet)
+        try:
+            clt.sendall(header + packet)
+        except BrokenPipeError:
+            warn(f"The client was disconnect during a sending operation: {clt.getpeername()}")
 
 # Basic Event Registry
 
