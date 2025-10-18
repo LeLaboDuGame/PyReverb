@@ -1,75 +1,71 @@
+<p align="center">
+  <img src="assets/banner.png" alt="PyReverb Banner">
+</p>
 
 # PyReverb
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)]()
-[![License](https://img.shields.io/badge/license-MIT-green)]()
+[![Version](https://img.shields.io/badge/version-1.0.3-blue)]()
+![License](https://img.shields.io/github/license/LeLaboDuGame/PyReverb)
 
 A lightweight Python networking framework for real-time client-server synchronization of objects, designed for multiplayer game development and interactive simulations.
 
 ---
 
 ## Table of Contents
-- [What the Project Does](#what-the-project-does)
-- [Why the Project is Useful](#why-the-project-is-useful)
-- [Getting Started](#getting-started)
-  - [Installation](#installation)
-  - [Usage Example](#usage-example)
-- [Support](#support)
-- [Contributing](#contributing)
+1. [What the Project Does](#what-the-project-does)  
+2. [Why the Project Is Useful](#why-the-project-is-useful)  
+3. [Getting Started](#getting-started)  
+   - [Prerequisites](#prerequisites)  
+   - [Installation](#installation)  
+4. [Usage Example](#usage-example)  
+5. [Configuration / Options](#configuration--options)  
+6. [Support](#support)  
+7. [Contributing](#contributing)  
+8. [License](#license)  
+9. [About](#about)
 
 ---
 
 ## What the Project Does
+PyReverb enables you to create network-synchronized objects across server and clients in Python.
 
-Reverb is a Python framework that allows you to create synchronized networked objects across a client-server architecture. It provides:
+**Key features:**
+- Event-driven networking with automatic packet handling  
+- Simple definition and synchronization of `ReverbObject` instances  
+- Remote function execution between server and clients  
+- Built-in registry for managing object types and instances efficiently
 
-- Event-driven networking with automatic packet handling.
-- Simple creation and synchronization of "ReverbObjects" across clients and servers.
-- Client-server communication for executing functions remotely.
-- Built-in registry for managing objects and types efficiently.
-
-It is ideal for building multiplayer games, simulations, or collaborative applications where objects need to stay in sync in real-time.
+Ideal for:
+- Multiplayer games  
+- Real-time simulations  
+- Collaborative interactive applications
 
 ---
 
-## Why the Project is Useful
-
-Key benefits:
-
-- **Real-time synchronization:** Keep objects consistent across multiple clients automatically.
-- **Event-driven architecture:** Easily react to client connections, disconnections, and custom events.
-- **Lightweight and extensible:** Minimal dependencies (`colorama`, `pygame`) and easy to extend for custom object types.
-- **Cross-side operations:** Compute on server from client, with ownership checks and safe data management.
-- **Simple networking abstractions:** Handles raw socket communication, packet encoding/decoding, and threading.
+## Why the Project Is Useful
+- **Real-time synchronization** of objects  
+- **Event-driven** architecture (connect, disconnect, custom events)  
+- **Lightweight & extensible** (minimal dependencies)  
+- **Flexible client/server design**  
+- **Simplified networking** (no need to manage sockets manually)
 
 ---
 
 ## Getting Started
 
+### Prerequisites
+- Python 3.x  
+- pip  
+- Dependencies in `requirements.txt`
+
 ### Installation
-
-1. Clone the repository:
-
 ```bash
 git clone https://github.com/LeLaboDuGame/PyReverb.git
-cd reverb
+cd PyReverb
+pip install -r requirements.txt
 ````
 
-2. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-> `requirements.txt` should include:
->
-> ```text
-> colorama
-> pygame
-> ```
-
-3. Run examples:
+### Running the example
 
 ```bash
 python Exemple.py
@@ -77,18 +73,17 @@ python Exemple.py
 
 ---
 
-### Usage Example
+## Usage Example
 
 ```python
-from reverb import ReverbManager, ReverbSide, ReverbObject, Client, Server, ReverbManager
+from reverb import ReverbManager, ReverbSide, ReverbObject, Client, Server
 
-# Set the side (SERVER or CLIENT)
+# On the server side:
 ReverbManager.REVERB_SIDE = ReverbSide.SERVER
 
-# Define a networked object
 @ReverbManager.reverb_object_attribute
 class Player(ReverbObject):
-    def __init__(self, pos=[0, 0], uid=None, add_on_init=True):
+    def __init__(self, pos=[0,0], uid=None, add_on_init=True):
         self.pos = pos
         super().__init__(pos, uid=uid, add_on_init=add_on_init)
 
@@ -98,41 +93,55 @@ class Player(ReverbObject):
     def on_init_from_server(self):
         print("Player initialized on server")
 
-# Start server
 server = Server()
 ReverbManager.REVERB_CONNECTION = server
 server.start_server()
-```
 
-On the client side:
-
-```python
+# On the client side:
 ReverbManager.REVERB_SIDE = ReverbSide.CLIENT
 client = Client()
 ReverbManager.REVERB_CONNECTION = client
 client.connect()
 ```
 
-The `ReverbManager` handles automatic synchronization of `ReverbObject` instances between server and clients.
+---
+
+## Configuration / Options
+
+*(Add any configuration settings, constants, or setup instructions here.)*
 
 ---
 
 ## Support
 
-* For issues and bug reports, use the [GitHub Issues](issues) page.
-* Documentation and API references are available in the `docs/` folder.
-* Community discussions can be held in the repository discussions section.
+* Open an **Issue** for bugs or feature requests
+* Start a **Discussion** for questions
+* Check the `docs/` folder for documentation and API reference
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please follow the [CONTRIBUTING.md](docs/CONTRIBUTING.md) guidelines.
+Contributions are welcome!
 
-Typical contributions include:
-
-* Adding new features or `ReverbObject` types.
-* Improving networking performance.
-* Fixing bugs and improving documentation.
+1. Open an **Issue** to discuss the idea
+2. Fork the repo & create a branch (`feature/my-feature`)
+3. Submit a **Pull Request**
+4. Add tests and documentation if possible
+5. Keep coding style consistent
 
 ---
+
+## License
+
+This project is licensed under the **Apache License 2.0**.
+See the [LICENSE](LICENSE) file for details.
+
+---
+
+## About
+
+Just a simple repo to implement a server for games in Python.
+Created by **LeLaboDuGame**.
+
+
