@@ -18,11 +18,10 @@ A lightweight Python networking framework for real-time client-server synchroniz
    - [Prerequisites](#prerequisites)  
    - [Installation](#installation)  
 4. [Usage Example](#usage-example)  
-5. [Configuration / Options](#configuration--options)  
-6. [Support](#support)  
-7. [Contributing](#contributing)  
-8. [License](#license)  
-9. [About](#about)
+5. [Support](#support)  
+6. [Contributing](#contributing)  
+7. [License](#license)  
+8. [About](#about)
 
 ---
 
@@ -103,12 +102,6 @@ client = Client()
 ReverbManager.REVERB_CONNECTION = client
 client.connect()
 ```
-
----
-
-## Configuration / Options
-
-*(Add any configuration settings, constants, or setup instructions here.)*
 
 ---
 
