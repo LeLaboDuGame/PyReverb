@@ -3,8 +3,8 @@ import uuid
 from enum import Enum
 from typing import Type, TypeVar
 
-from reverb_kernel import *
-from reverb_errors import *
+from .reverb_kernel import *
+from .reverb_errors import *
 
 T = TypeVar("T")
 

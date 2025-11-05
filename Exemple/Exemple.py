@@ -1,7 +1,5 @@
-import socket
-import threading
-import time
 import random
+
 import pygame
 from pygame import Vector2, Surface
 
@@ -11,11 +9,12 @@ from reverb import *
 ReverbManager.REVERB_SIDE = [ReverbSide.SERVER, ReverbSide.CLIENT][int(input("1-SERVER\n2-CLIENT\n>>> ")) - 1]
 
 clock = pygame.time.Clock()
-reverb.VERBOSE = 1 # make it speak less
+reverb.VERBOSE = 1  # make it speak less
+
 
 @ReverbManager.reverb_object_attribute
 class Bullet(ReverbObject):
-    def __init__(self, pos, dir, color, belonging_membership:int=None):
+    def __init__(self, pos, dir, color, belonging_membership: int = None):
         self.pos = pos
         self.dir = dir
         self.color = color
@@ -37,14 +36,14 @@ class Bullet(ReverbObject):
             self.pos = list(self.pos + Vector2(self.dir) * self.speed)
             clock.tick(60)
 
+
 @ReverbManager.reverb_object_attribute
 class Player(ReverbObject):
-    def __init__(self, pos=[0, 0], dir=[0, 0], color="red", belonging_membership:int=None):
+    def __init__(self, pos=[0, 0], dir=[0, 0], color="red", belonging_membership: int = None):
         self.pos = pos
         self.dir = dir
         self.color = color
         super().__init__(pos, dir, color, belonging_membership=belonging_membership)
-
 
     def on_init_from_client(self):
         while self.is_alive:
@@ -68,7 +67,6 @@ class Player(ReverbObject):
                         self.compute_server(self.spawn_bullet)
                         time.sleep(1)
 
-
                     clock.tick(tick)
 
     @staticmethod
@@ -81,6 +79,7 @@ class Player(ReverbObject):
         for d in dir:
             def is_pos_in_map_bound(pos: Vector2):
                 return 0 <= pos.x <= map_size[0] and 0 <= pos.y <= map_size[1]
+
             speed = 5
             l_pos = {"Z": (0, -1), "S": (0, 1), "D": (1, 0), "Q": (-1, 0)}
             self.dir = tuple(self.dir + Vector2(l_pos[d]))
@@ -90,14 +89,18 @@ class Player(ReverbObject):
             self.pos = tuple(new_pos)
 
     def spawn_bullet(self):
-        ReverbManager.add_new_reverb_object(Bullet(self.pos, self.dir, self.color, belonging_membership=self.belonging_membership))
+        ReverbManager.add_new_reverb_object(
+            Bullet(self.pos, self.dir, self.color, belonging_membership=self.belonging_membership))
+
 
 @server_event_registry.on_event("client_connection")
-def on_connecting(clt:socket.socket, *args):
-    ReverbManager.add_new_reverb_object(Player(pos=[400, 400], color=Player.choose_rnd_color(), belonging_membership=clt.getpeername()[1]))
+def on_connecting(clt: socket.socket, *args):
+    ReverbManager.add_new_reverb_object(
+        Player(pos=[400, 400], color=Player.choose_rnd_color(), belonging_membership=clt.getpeername()[1]))
+
 
 @server_event_registry.on_event("client_disconnection")
-def on_disconnecting(clt:socket.socket, *args):
+def on_disconnecting(clt: socket.socket, *args):
     for p in ReverbManager.get_all_ro_by_type(Player):
         if p.belonging_membership == clt.getpeername()[1]:
             ReverbManager.remove_reverb_object(p.uid)
@@ -117,7 +120,6 @@ if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
     ReverbManager.REVERB_CONNECTION = clt
     clt.connect()
 
-
     while is_running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -126,12 +128,10 @@ if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
         screen.fill("purple")
 
         for p in ReverbManager.get_all_ro_by_type(Player):
-
             pygame.draw.circle(screen, p.color, tuple(p.pos), 3)
 
         for b in ReverbManager.get_all_ro_by_type(Bullet):
             pygame.draw.line(screen, b.color, Vector2(b.pos) - Vector2(b.dir), Vector2(b.pos) + Vector2(b.dir), 1)
-
 
         pygame.display.flip()
         clock.tick(tick)
@@ -150,4 +150,3 @@ else:
             ReverbManager.server_sync()
         except KeyboardInterrupt:
             serv.stop_server()
-
