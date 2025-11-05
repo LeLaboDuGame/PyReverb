@@ -1,23 +1,64 @@
-import threading
+import atexit
+import os.path
+import time
 import uuid
 from enum import Enum
 from typing import Type, TypeVar
 
-from .reverb_kernel import *
-from .reverb_errors import *
+from reverb_errors import *
+from reverb_kernel import *
 
 T = TypeVar("T")
 
-VERBOSE=2
+VERBOSE = 2
+PATH_LOG = "./logs/server.log"
 """
 - 2: Full verbose
 - 1: Only some things
 - 0: Stop verbosing
 """
 
+
+def handle_exit():
+    """
+    Trigger on exit
+    """
+    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+        save_logs(PATH_LOG)
+
+
+atexit.register(handle_exit)
+
+
+def check_for_shutdown_flag():
+    """
+    - rigger an exit on windows if the shutdown.flag is saw
+    - Will not trigger any atexit event
+    """
+    while True:
+        time.sleep(1)
+        if os.path.exists("./shutdown.flag") and ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+            print("Receiving a shutdown flag closing...")
+            os.remove("./shutdown.flag")
+            save_logs()
+            os._exit(0)
+
+
+# Start the thread that checks a shutdown flag
+threading.Thread(target=check_for_shutdown_flag, daemon=True).start()
+
+
+def stop_distant_server():
+    """
+    Call to generate a shutdown.flag file to shut down the server if he is on a subprocess
+    """
+    open("./shutdown.flag", "w").close()
+
+
 class ReverbSide(Enum):
     SERVER = 1
     CLIENT = 2
+
 
 def check_if_json_serializable(*args):
     for arg in args:
@@ -27,13 +68,14 @@ def check_if_json_serializable(*args):
             raise Exception(
                 f"The arg: {arg} is not serializable ! It has to be serializable by JSON to be agree as a reverb_args.")
 
+
 class ReverbObject:
-    def __init__(self, *reverb_args, uid:str="Unknown", belonging_membership:int=None):
+    def __init__(self, *reverb_args, uid: str = "Unknown", belonging_membership: int = None):
         """
         - Base class of all object connected to the Network
         :param reverb_args: All the custom vars
         :param uid: The uid of the object, let it on None if you are not sure of what you're doing here
-        :param belonging_membership: This refers to the port of client. With this you can know if the RO is from a local instance or not. Let it on None if you're not sure what you're doing here
+        :param belonging_membership: This refers to the port of a client. With this you can know if the RO is from a local instance or not. Let it on None if you're not sure what you're doing here
         """
         self.belonging_membership = belonging_membership
         self.reverb_args = reverb_args
@@ -43,7 +85,7 @@ class ReverbObject:
 
     def pack(self):
         """
-        :return: A list of all needed args that are linked between the server and the clients
+        :return: A list of all necessary args that are linked between the server and the clients
         """
         check_if_json_serializable(*self.reverb_args)
         return [self.type, self.belonging_membership, list(self.__dict__.values())[:len(self.reverb_args)]]
@@ -76,8 +118,8 @@ class ReverbObject:
 
     def is_owner(self):
         """
-        - Chek if the ReverbObject is membership of this client
-        - Only call on 'CLIENT' side
+        - Chek if the ReverbObject is a membership of this client
+        - Only call on the 'CLIENT' side
         :return:
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
@@ -97,13 +139,13 @@ class ReverbObject:
 
     def is_uid_init(self):
         """
-        :return: if uid is init or not
+        :return: if uid is an init or not
         """
         return self.uid != "Unknown"
 
     def on_init_from_client(self):
         """
-        - Call on 'CLIENT' side
+        - Call on the 'CLIENT' side
         - Override this function
         - Call when the object is creating from the 'Client' side
         """
@@ -117,7 +159,7 @@ class ReverbObject:
 
     def on_destroy_from_client(self):
         """
-        - Call on 'CLIENT' side
+        - Call on the 'CLIENT' side
         - Override this function
         - Call when the object is removing from the 'CLIENT' side
         """
@@ -133,12 +175,13 @@ class ReverbObject:
         if VERBOSE == 2:
             ReverbObject.print_object(f"Destroying the object {self.uid=}")
 
+
 class ReverbManager:
     """
-    - This class is static !
-    - It links ReverbObject to the reference of the ReverbObject !
+    - This class is static!
+    - It links ReverbObject to the reference of the ReverbObject!
     """
-    REVERB_SIDE: ReverbSide = ReverbSide.SERVER
+    REVERB_SIDE: ReverbSide = None
     REVERB_CONNECTION = None  # Client, or Server
     REVERB_OBJECTS: dict[str, ReverbObject] = {}
     REVERB_OBJECT_REGISTRY = {"ReverbObject": ReverbObject}  # Register all type
@@ -197,11 +240,11 @@ class ReverbManager:
             raise ReverbTypeNotFoundError(t)
 
     @staticmethod
-    def get_all_ro_by_type(t:Type[T]) -> list[T]:
+    def get_all_ro_by_type(t: Type[T]) -> list[T]:
         """
         - Get all the ReverbObject by a type
         :param t: Type of ReverbObject
-        :return: Return the list of all found same type into the ReverbManager
+        :return: Return the list of all found same types into the ReverbManager
         """
         ros = []
         for uid, ro in ReverbManager.REVERB_OBJECTS.items():
@@ -236,10 +279,11 @@ class ReverbManager:
         else:
             raise ReverbObjectAlreadyExistError(ro)
         if VERBOSE == 2:
-            ReverbManager.print_manager(f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}' side with uid={ro.uid}")
+            ReverbManager.print_manager(
+                f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}' side with uid={ro.uid}")
 
     @staticmethod
-    def remove_reverb_object(uid:str):
+    def remove_reverb_object(uid: str):
         """
         - Call on 'SERVER' side only
         - Remove the ro from all clients
@@ -252,7 +296,8 @@ class ReverbManager:
 
                 threading.Thread(target=ro.on_destroy_from_server, daemon=True).start()
                 ReverbManager.REVERB_OBJECTS[uid] = "DESTROYED"
-                f = lambda: (time.sleep(3), ReverbManager.REVERB_OBJECTS.pop(uid)) # Remove the ro 3 sec after on the server to avoid syncing bugs
+                f = lambda: (time.sleep(3), ReverbManager.REVERB_OBJECTS.pop(
+                    uid))  # Remove the ro 3 sec after on the server to avoid syncing bugs
                 threading.Thread(target=f, daemon=True).start()
             except KeyError:
                 raise KeyError(f"The {uid=} is not found !")
@@ -263,7 +308,7 @@ class ReverbManager:
 
     @staticmethod
     @client_event_registry.on_event("remove_ro")
-    def on_server_remove_reverb_object(clt:socket.socket, uid, *args):
+    def on_server_remove_reverb_object(clt: socket.socket, uid, *args):
         """
         - Only call on 'CLIENT' side
         - Remove the object
@@ -271,35 +316,35 @@ class ReverbManager:
         :param uid: The uid of the ReverbObject to delete
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
-            ro:ReverbObject = ReverbManager.get_reverb_object(uid)
+            ro: ReverbObject = ReverbManager.get_reverb_object(uid)
             ro.is_alive = False
             ReverbManager.REVERB_OBJECTS.pop(uid)
             threading.Thread(target=ro.on_destroy_from_client(), daemon=True).start()
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE)
 
-
     @staticmethod
     @client_event_registry.on_event("server_sync")
     def on_server_sync(clt: socket.socket, ros: dict[str, list[list[object]]], *args):
         """
         - Called on the 'Client' side
-        - Called when the server sync state of ReverbObject with clients
+        - Called when the server syncs the state of ReverbObject with clients
         :param clt: The client socket
-        :param ros: Dict[uids:list[list(values)]]
+        :param ros: Dict[uids: list[list(values)]]
         """
         for uid, ro_data in ros.items():
-            ro:ReverbObject = None
+            ro: ReverbObject = None
             try:  # try to get a reverb_object
                 ro = ReverbManager.get_reverb_object(uid)
             except ReverbObjectNotFoundError:  # create a new one
-                t:str = ro_data[0]
+                t: str = ro_data[0]
                 cls = ReverbManager.get_cls_by_type_name(t)
                 args = ro_data[2]
                 try:
                     ro = cls(*args, belonging_membership=ro_data[1])
                 except TypeError:
-                    raise TypeError(f"Not enough param passed! You try to construct {cls} but those elements are passed {args}, {ro_data}")
+                    raise TypeError(
+                        f"Not enough param passed! You try to construct {cls} but those elements are passed {args}, {ro_data}")
                 ro.uid = uid
                 ReverbManager.add_new_reverb_object(ro)
             ro.sync(*ro_data[2:][0])
@@ -309,7 +354,7 @@ class ReverbManager:
     def on_calling_server_computing(clt: socket.socket, uid: str, func_name: str, *args):
         """
         - Called on the 'Server' side
-        - Called when a ReverbObject send data to be computes by the server (like movements, interactions, etc.)
+        - Called when a ReverbObject send data to be computed by the server (like movements, interactions, etc.)
         :param clt: The client socket
         :param uid: The uid of the ReverbObject
         :param func_name: The function name
@@ -321,10 +366,9 @@ class ReverbManager:
                 return
         except ReverbObjectNotFoundError:
             warn(f"You try to compute on the server with a uid not found {uid=}.\n"
-                                        f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast! or just because the uid is real2"
-                                        f"ly not found!")
+                 f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast! or just because the uid is real2"
+                 f"ly not found!")
             return
-
 
         try:
             func = getattr(ro, func_name)

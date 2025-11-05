@@ -1,12 +1,14 @@
+import os.path
 import random
+import subprocess
+import sys
+import time
 
 import pygame
 from pygame import Vector2, Surface
 
 import reverb
 from reverb import *
-
-ReverbManager.REVERB_SIDE = [ReverbSide.SERVER, ReverbSide.CLIENT][int(input("1-SERVER\n2-CLIENT\n>>> ")) - 1]
 
 clock = pygame.time.Clock()
 reverb.VERBOSE = 1  # make it speak less
@@ -109,13 +111,17 @@ def on_disconnecting(clt: socket.socket, *args):
 map_size = (800, 800)
 tick = 60
 
-if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
-
+if len(sys.argv) == 1:
     pygame.init()
     screen: Surface = pygame.display.set_mode(map_size)
     is_running = True
     print("Pygame is init !")
-
+    process = None
+    choice = input("Is the host? (Y|n)>>>")
+    if choice == "Y" or choice == "":
+        print(os.path.dirname(os.path.abspath(__file__)))
+        process = subprocess.Popen([sys.executable, "Exemple.py", "server"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    ReverbManager.REVERB_SIDE = ReverbSide.CLIENT
     clt = Client()
     ReverbManager.REVERB_CONNECTION = clt
     clt.connect()
@@ -140,7 +146,17 @@ if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
     pygame.quit()
     clt.disconnect()
 
+    # Check for an active process (that's mean you host, and you play on the same machine)
+    if process:
+        print("Wait for the server to be killed")
+        stop_distant_server()
+        process.wait()
+        print("Server process closed")
+        exit()
+
 else:
+    print(f"Launched with args: {sys.argv}")
+    ReverbManager.REVERB_SIDE = ReverbSide.SERVER
     serv = Server()
     ReverbManager.REVERB_CONNECTION = serv
     serv.start_server()
@@ -150,3 +166,4 @@ else:
             ReverbManager.server_sync()
         except KeyboardInterrupt:
             serv.stop_server()
+            break
