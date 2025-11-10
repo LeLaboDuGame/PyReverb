@@ -62,7 +62,8 @@ def start_distant(file, side: ReverbSide, is_host=False, *args, **kwargs):
     :param args: More arguments
     :param kwargs: More dict arguments
     """
-    subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs), creationflags=subprocess.CREATE_NEW_CONSOLE)
+    subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs),
+                     creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 
 def stop_distant_server():
@@ -148,6 +149,16 @@ class ReverbObject:
         """
         if self.is_alive:
             ReverbManager.REVERB_CONNECTION.send("calling_server_computing", self.uid, func.__name__, *args)
+
+    def compute_client(self, func, *args):
+        """
+        - Send a Packet to the client to compute a function client with args
+        - Only on 'SERVER' side
+        :param func: The client function reference. Has to be into the Class
+        :param args: Args of the function
+        """
+        if self.is_alive:
+            ReverbManager.REVERB_CONNECTION.send("calling_client_computing", self.uid, func.__name__, *args)
 
     def is_uid_init(self):
         """
@@ -384,6 +395,36 @@ class ReverbManager:
         except ReverbObjectNotFoundError:
             warn(f"You try to compute on the server with a uid not found {uid=}.\n"
                  f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast! or just because the uid is real2"
+                 f"ly not found!")
+            return
+
+        try:
+            func = getattr(ro, func_name)
+            if args == ():
+                func()
+            else:
+                func(*args)
+        except AttributeError:
+            raise NameError(f"The {func_name=} wasn't found into the ReverbObject!")
+
+    @staticmethod
+    @client_event_registry.on_event("calling_client_computing")
+    def on_calling_client_computing(clt: socket.socket, uid: str, func_name: str, *args):
+        """
+        - Called on the 'Client' side
+        - Called when a ReverbObject send data to be computed by the client
+        :param clt: The socket
+        :param uid: The uid of the ReverbObject
+        :param func_name: The function name
+        :param args: Params of the function
+        """
+        try:
+            ro = ReverbManager.get_reverb_object(uid)
+            if ro == "DESTROYED":
+                return
+        except ReverbObjectNotFoundError:
+            warn(f"You try to compute on the client with a uid not found {uid=}.\n"
+                 f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast! or just because the uid is rea"
                  f"ly not found!")
             return
 

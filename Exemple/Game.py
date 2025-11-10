@@ -75,11 +75,13 @@ class Player(ReverbObject):
     # ON SERVER
     def check_walk(self, dir):
         self.dir = [0, 0]
-        for d in dir:
-            def is_pos_in_map_bound(pos: Vector2):
-                return 0 <= pos.x <= map_size[0] and 0 <= pos.y <= map_size[1]
+        speed = 5
 
-            speed = 5
+        def is_pos_in_map_bound(pos: Vector2):
+            return 0 <= pos.x <= map_size[0] and 0 <= pos.y <= map_size[1]
+
+        for d in dir:
+
             l_pos = {"Z": (0, -1), "S": (0, 1), "D": (1, 0), "Q": (-1, 0)}
             self.dir = tuple(self.dir + Vector2(l_pos[d]))
 
