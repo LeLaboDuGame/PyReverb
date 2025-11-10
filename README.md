@@ -67,7 +67,7 @@ pip install -r requirements.txt
 ### Running the example
 
 ```bash
-python Exemple.py
+python Game.py
 ```
 
 ---

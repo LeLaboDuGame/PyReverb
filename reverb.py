@@ -1,5 +1,6 @@
 import atexit
 import os.path
+import subprocess
 import time
 import uuid
 from enum import Enum
@@ -48,16 +49,27 @@ def check_for_shutdown_flag():
 threading.Thread(target=check_for_shutdown_flag, daemon=True).start()
 
 
-def stop_distant_server():
-    """
-    Call to generate a shutdown.flag file to shut down the server if he is on a subprocess
-    """
-    open("./shutdown.flag", "w").close()
-
-
 class ReverbSide(Enum):
     SERVER = 1
     CLIENT = 2
+
+
+def start_distant(file, side: ReverbSide, is_host=False, *args, **kwargs):
+    """
+    Sart a process of the game with his side.
+    :param side: The side to start
+    :param is_host: Set to true if the client (and only for client) is the host
+    :param args: More arguments
+    :param kwargs: More dict arguments
+    """
+    subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs), creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+
+def stop_distant_server():
+    """
+    Called to generate a shutdown.flag file to shut down the server if he is on a subprocess
+    """
+    open("./shutdown.flag", "w").close()
 
 
 def check_if_json_serializable(*args):
@@ -185,6 +197,11 @@ class ReverbManager:
     REVERB_CONNECTION = None  # Client, or Server
     REVERB_OBJECTS: dict[str, ReverbObject] = {}
     REVERB_OBJECT_REGISTRY = {"ReverbObject": ReverbObject}  # Register all type
+    try:
+        IS_HOST = sys.argv[2] == "1"
+        """Set to true automatically if is_host param passed as param otherwise False"""
+    except:
+        IS_HOST = False  # Check if host
 
     @staticmethod
     def print_manager(msg):

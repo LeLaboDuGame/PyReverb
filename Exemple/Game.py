@@ -1,7 +1,4 @@
-import os.path
 import random
-import subprocess
-import sys
 import time
 
 import pygame
@@ -111,22 +108,19 @@ def on_disconnecting(clt: socket.socket, *args):
 map_size = (800, 800)
 tick = 60
 
-if len(sys.argv) == 1:
+if sys.argv[1] == "CLIENT":  # CLIENT
     pygame.init()
     screen: Surface = pygame.display.set_mode(map_size)
     is_running = True
     print("Pygame is init !")
     process = None
-    choice = input("Is the host? (Y|n)>>>")
-    if choice == "Y" or choice == "":
-        print(os.path.dirname(os.path.abspath(__file__)))
-        process = subprocess.Popen([sys.executable, "Exemple.py", "server"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+
     ReverbManager.REVERB_SIDE = ReverbSide.CLIENT
     clt = Client()
     ReverbManager.REVERB_CONNECTION = clt
     clt.connect()
 
-    while is_running:
+    while is_running and ReverbManager.REVERB_CONNECTION.is_connected:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 is_running = False
@@ -142,19 +136,16 @@ if len(sys.argv) == 1:
         pygame.display.flip()
         clock.tick(tick)
 
+
+
+
     print("Closing the game...")
     pygame.quit()
     clt.disconnect()
-
-    # Check for an active process (that's mean you host, and you play on the same machine)
-    if process:
-        print("Wait for the server to be killed")
+    # Stop distant server
+    if ReverbManager.IS_HOST:
         stop_distant_server()
-        process.wait()
-        print("Server process closed")
-        exit()
-
-else:
+elif sys.argv[1] == "SERVER":  # SERVER
     print(f"Launched with args: {sys.argv}")
     ReverbManager.REVERB_SIDE = ReverbSide.SERVER
     serv = Server()
@@ -167,3 +158,6 @@ else:
         except KeyboardInterrupt:
             serv.stop_server()
             break
+else:
+    print(f"Reverb game launch without any argument !\n"
+          f"You need to start it with 1 for Server or 2 for Client")

@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import re
@@ -8,8 +9,8 @@ import threading
 from io import StringIO
 from json import JSONDecodeError
 from warnings import warn
+
 from colorama import Fore, Back, Style
-import datetime
 
 
 class Tee:
@@ -59,7 +60,6 @@ def save_logs(path: str = "./logs/server.log"):
         log_file.write("\nLog saved!")
         log_file.close()
     print("Log saved!")
-
 
 
 class EventRegistry:
@@ -236,6 +236,7 @@ class Client:
         """
         if self.is_connected:
             try:
+                print("SEND")
                 self.send("client_disconnection", self.client.getpeername())
             finally:
                 self.is_connected = False
@@ -315,32 +316,31 @@ class Server:
 
     def _handle_client(self, client_socket, addr):
         """Thread that triggers event from packet recv from clients"""
-        try:
-            while self.is_online:
-                try:
-                    raw_len = Packet.recv_exact(client_socket, 4)  # Get the length of the packet
-                    length = struct.unpack("!I", raw_len)[0]
-                    packet = Packet.recv_exact(client_socket, length)
-                    if packet:
-                        packet_name, contents = Packet.decode_packet(packet)
-                        if packet_name == "client_disconnection":
-                            break
-                        else:
-                            server_event_registry.trigger(packet_name, client_socket, *contents)
-                    else:
-                        Server.print_server(
-                            f"A packet from: {addr} has been send with no data ! This is illegal closing the listening thread and the communication !")
+        while self.is_online:
+            try:
+                raw_len = Packet.recv_exact(client_socket, 4)  # Get the length of the packet
+                length = struct.unpack("!I", raw_len)[0]
+                packet = Packet.recv_exact(client_socket, length)
+                if packet:
+                    packet_name, contents = Packet.decode_packet(packet)
+
+                    if packet_name == "client_disconnection":
+                        server_event_registry.trigger(packet_name, client_socket, *contents, threading_event=False)
                         break
-                except ConnectionResetError:
-                    Server.print_server(f"The client at address: {addr} has been disconnected ! This is an anomaly.")
+                    else:
+                        server_event_registry.trigger(packet_name, client_socket, *contents)
+                else:
+                    Server.print_server(
+                        f"A packet from: {addr} has been send with no data ! This is illegal closing the listening thread and the communication !")
                     break
-        finally:
-            server_event_registry.trigger(packet_name, client_socket, *contents,
-                                          threading_event=False)
-            if addr in self.clients:
-                self.clients.pop(addr)
-            client_socket.close()
-            Server.print_server(f"The client: {addr} is disconnect !")
+            except ConnectionResetError:
+                Server.print_server(f"The client at address: {addr} has been disconnected ! This is an anomaly.")
+                break
+
+        if addr in self.clients:
+            self.clients.pop(addr)
+        client_socket.close()
+        Server.print_server(f"The client: {addr} is disconnect !")
 
     def send_to_all(self, packet_name, *contents):
         """
