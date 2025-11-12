@@ -236,7 +236,6 @@ class Client:
         """
         if self.is_connected:
             try:
-                print("SEND")
                 self.send("client_disconnection", self.client.getpeername())
             finally:
                 self.is_connected = False

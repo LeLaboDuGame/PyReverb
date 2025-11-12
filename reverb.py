@@ -54,9 +54,29 @@ class ReverbSide(Enum):
     CLIENT = 2
 
 
+class SyncVar:
+    """
+    Simple class that trigger a hook when the value changes and syncs var between all clients
+    """
+
+    def __init__(self, default=None, on_change=None):
+        self.on_change = on_change
+        self.value = default
+
+    def get(self, val_if_not_found=None):
+        return self.value if self.value else val_if_not_found
+
+    def set(self, val):
+        old = self.value
+        self.value = val
+        if self.on_change and old != val:
+            self.on_change(old, val)
+
+
 def start_distant(file, side: ReverbSide, is_host=False, *args, **kwargs):
     """
     Sart a process of the game with his side.
+    :param file: The name of the file to be executed
     :param side: The side to start
     :param is_host: Set to true if the client (and only for client) is the host
     :param args: More arguments
@@ -73,7 +93,7 @@ def stop_distant_server():
     open("./shutdown.flag", "w").close()
 
 
-def check_if_json_serializable(*args):
+def check_if_json_serializable(*args: SyncVar):
     for arg in args:
         try:
             json.dumps(arg)
@@ -83,7 +103,7 @@ def check_if_json_serializable(*args):
 
 
 class ReverbObject:
-    def __init__(self, *reverb_args, uid: str = "Unknown", belonging_membership: int = None):
+    def __init__(self, *reverb_args: SyncVar, uid: str = "Unknown", belonging_membership: int = None):
         """
         - Base class of all object connected to the Network
         :param reverb_args: All the custom vars
@@ -96,12 +116,20 @@ class ReverbObject:
         self.is_alive = True
         self.type = self.__class__.__name__
 
+    def get_sync_vars(self, get_value=False):
+        sync_vars = []
+        for arg in list(self.__dict__.values())[:len(self.reverb_args)]:
+            if isinstance(type(arg), type(SyncVar)):
+                sync_vars.append(arg.get() if get_value else arg)
+        return sync_vars
+
     def pack(self):
         """
         :return: A list of all necessary args that are linked between the server and the clients
         """
-        check_if_json_serializable(*self.reverb_args)
-        return [self.type, self.belonging_membership, list(self.__dict__.values())[:len(self.reverb_args)]]
+        sync_vars = self.get_sync_vars(get_value=True)
+        check_if_json_serializable(*sync_vars)
+        return [self.type, self.belonging_membership] + (sync_vars if sync_vars != [] else [[]])
 
     def sync(self, *reverb_args):
         """
@@ -111,12 +139,12 @@ class ReverbObject:
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
             if len(self.reverb_args) != len(reverb_args):
-                raise ValueError(f"Length of argument in the class are not the same than the server send: "
+                raise ValueError(f"Length of argument in the class={type(self)} are not the same than the server send: "
                                  f"expected {len(self.reverb_args)} got {len(reverb_args)}")
             else:
                 if reverb_args != ():
                     for key, val in zip(self.__dict__, reverb_args):
-                        setattr(self, key, val)
+                        getattr(self, key).set(val)
                     self.reverb_args = reverb_args
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE.name)
@@ -365,9 +393,10 @@ class ReverbManager:
             try:  # try to get a reverb_object
                 ro = ReverbManager.get_reverb_object(uid)
             except ReverbObjectNotFoundError:  # create a new one
-                t: str = ro_data[0]
-                cls = ReverbManager.get_cls_by_type_name(t)
-                args = ro_data[2]
+                t: str = ro_data[0]  # Type
+                cls = ReverbManager.get_cls_by_type_name(t)  # Class
+                args = ro_data[2:]  # arguments
+
                 try:
                     ro = cls(*args, belonging_membership=ro_data[1])
                 except TypeError:
@@ -375,7 +404,7 @@ class ReverbManager:
                         f"Not enough param passed! You try to construct {cls} but those elements are passed {args}, {ro_data}")
                 ro.uid = uid
                 ReverbManager.add_new_reverb_object(ro)
-            ro.sync(*ro_data[2:][0])
+            ro.sync(*ro_data[2:])
 
     @staticmethod
     @server_event_registry.on_event("calling_server_computing")

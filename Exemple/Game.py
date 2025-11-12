@@ -1,5 +1,4 @@
 import random
-import time
 
 import pygame
 from pygame import Vector2, Surface
@@ -8,17 +7,17 @@ import reverb
 from reverb import *
 
 clock = pygame.time.Clock()
-reverb.VERBOSE = 1  # make it speak less
+reverb.VERBOSE = 2  # make it speak less
 
 
 @ReverbManager.reverb_object_attribute
 class Bullet(ReverbObject):
     def __init__(self, pos, dir, color, belonging_membership: int = None):
-        self.pos = pos
-        self.dir = dir
-        self.color = color
+        self.pos = SyncVar(pos)
+        self.dir = SyncVar(dir)
+        self.color = SyncVar(color)
         self.speed = 2
-        super().__init__(pos, dir, color, belonging_membership=belonging_membership)
+        super().__init__(self.pos, self.dir, self.color, belonging_membership=belonging_membership)
 
     def on_init_from_client(self):
         if self.is_owner():
@@ -32,17 +31,17 @@ class Bullet(ReverbObject):
 
     def update(self):
         while self.is_alive:
-            self.pos = list(self.pos + Vector2(self.dir) * self.speed)
+            self.pos.set(list(self.pos.get() + Vector2(self.dir.get()) * self.speed))
             clock.tick(60)
 
 
 @ReverbManager.reverb_object_attribute
 class Player(ReverbObject):
     def __init__(self, pos=[0, 0], dir=[0, 0], color="red", belonging_membership: int = None):
-        self.pos = pos
-        self.dir = dir
-        self.color = color
-        super().__init__(pos, dir, color, belonging_membership=belonging_membership)
+        self.pos = SyncVar(pos)
+        self.dir = SyncVar(dir)
+        self.color = SyncVar(color)
+        super().__init__(self.pos, self.dir, self.color, belonging_membership=belonging_membership)
 
     def on_init_from_client(self):
         while self.is_alive:
@@ -74,24 +73,23 @@ class Player(ReverbObject):
 
     # ON SERVER
     def check_walk(self, dir):
-        self.dir = [0, 0]
+        self.dir.set([0, 0])
         speed = 5
 
         def is_pos_in_map_bound(pos: Vector2):
             return 0 <= pos.x <= map_size[0] and 0 <= pos.y <= map_size[1]
 
         for d in dir:
-
             l_pos = {"Z": (0, -1), "S": (0, 1), "D": (1, 0), "Q": (-1, 0)}
-            self.dir = tuple(self.dir + Vector2(l_pos[d]))
+            self.dir.set(tuple(self.dir.get() + Vector2(l_pos[d])))
 
-        new_pos = self.pos + Vector2(self.dir) * speed
+        new_pos = self.pos.get() + Vector2(self.dir.get()) * speed
         if is_pos_in_map_bound(new_pos):
-            self.pos = tuple(new_pos)
+            self.pos.set(tuple(new_pos))
 
     def spawn_bullet(self):
         ReverbManager.add_new_reverb_object(
-            Bullet(self.pos, self.dir, self.color, belonging_membership=self.belonging_membership))
+            Bullet(self.pos.get(), self.dir.get(), self.color.get(), belonging_membership=self.belonging_membership))
 
 
 @server_event_registry.on_event("client_connection")
@@ -130,16 +128,14 @@ if sys.argv[1] == "CLIENT":  # CLIENT
         screen.fill("purple")
 
         for p in ReverbManager.get_all_ro_by_type(Player):
-            pygame.draw.circle(screen, p.color, tuple(p.pos), 3)
+            pygame.draw.circle(screen, p.color.get(), tuple(p.pos.get()), 3)
 
         for b in ReverbManager.get_all_ro_by_type(Bullet):
-            pygame.draw.line(screen, b.color, Vector2(b.pos) - Vector2(b.dir), Vector2(b.pos) + Vector2(b.dir), 1)
+            pygame.draw.line(screen, b.color.get(), Vector2(b.pos.get()) - Vector2(b.dir.get()),
+                             Vector2(b.pos.get()) + Vector2(b.dir.get()), 1)
 
         pygame.display.flip()
         clock.tick(tick)
-
-
-
 
     print("Closing the game...")
     pygame.quit()
