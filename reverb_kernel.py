@@ -63,10 +63,11 @@ def save_logs(path: str = "./logs/server.log"):
 
 
 class EventRegistry:
+    """
+    A Class that store events and handle them!
+    """
+
     def __init__(self):
-        """
-        A Class that store events and handle them!
-        """
         self._events = {}
 
     def on_event(self, event_name):
@@ -127,6 +128,10 @@ server_event_registry = EventRegistry()
 
 
 class Packet:
+    """
+    Manager of packets
+    """
+
     @staticmethod
     def create_packet(name: str, *content):
         """
@@ -164,9 +169,12 @@ class Packet:
 
 
 class Client:
+    """
+    - A class that connect to a Server
+    """
+
     def __init__(self, ip="127.0.0.1", port=8080):
         """
-        - A class that connect to a Server
         :param ip: Ip server's
         :param port: Port server
         """
@@ -228,7 +236,12 @@ class Client:
             packet = Packet.create_packet(packet_name, *content)
             length = len(packet)
             header = struct.pack('!I', length)
-            self.client.send(header + packet)
+            try:
+                self.client.sendall(header + packet)
+            except BrokenPipeError:
+                warn("The client has been disconnected during a sending operation!")
+            except ConnectionResetError:
+                warn("Server close or client disconnected during a sending operation!")
 
     def disconnect(self):
         """
@@ -252,9 +265,12 @@ class Client:
 
 
 class Server:
+    """
+    - A class that open a Server
+    """
+
     def __init__(self, host="", port=8080):
         """
-        - A class that open a Server
         :param host: The ip. Let it him by default
         :param port: The listen port!
         """
@@ -333,6 +349,7 @@ class Server:
                         f"A packet from: {addr} has been send with no data ! This is illegal closing the listening thread and the communication !")
                     break
             except ConnectionResetError:
+                server_event_registry.trigger("client_disconnection", client_socket, threading_event=False)
                 Server.print_server(f"The client at address: {addr} has been disconnected ! This is an anomaly.")
                 break
 
@@ -347,14 +364,8 @@ class Server:
         :param packet_name: The name of the packet/event
         :param contents: Contents
         """
-        packet = Packet.create_packet(packet_name, *contents)
-        length = len(packet)
-        header = struct.pack('!I', length)
         for client in self.clients.values():
-            try:
-                client.sendall(header + packet)
-            except BrokenPipeError:
-                warn(f"The client was disconnect during a sending operation: {client.getpeername()}")
+            self.send_to(client, packet_name, *contents)
 
     @staticmethod
     def send_to(clt: socket.socket, packet_name, *contents):
@@ -365,6 +376,8 @@ class Server:
             clt.sendall(header + packet)
         except BrokenPipeError:
             warn(f"The client was disconnect during a sending operation: {clt.getpeername()}")
+        except ConnectionResetError:
+            warn(f"A client was disconnect during a sending operation!")
 
 
 # Basic Event Registry
