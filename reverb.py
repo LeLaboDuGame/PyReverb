@@ -1,13 +1,15 @@
 import atexit
 import os.path
+import platform
+import shutil
 import subprocess
 import time
 import uuid
 from enum import Enum
 from typing import Type, TypeVar
 
-from reverb_errors import *
-from reverb_kernel import *
+from PyReverb.reverb_errors import *
+from PyReverb.reverb_kernel import *
 
 T = TypeVar("T")
 
@@ -95,7 +97,7 @@ class SyncVar:
                 func(old, val)
 
 
-def start_distant(file, side: ReverbSide, is_host=False, *args, **kwargs):
+def start_distant(file, side: str, venv_activate_path:str, is_host=False, *args, **kwargs):
     """
     Sart a process of the game with his side.
     :param file: The name of the file to be executed
@@ -104,9 +106,7 @@ def start_distant(file, side: ReverbSide, is_host=False, *args, **kwargs):
     :param args: More arguments
     :param kwargs: More dict arguments
     """
-    subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs),
-                     creationflags=subprocess.CREATE_NEW_CONSOLE)
-
+    subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
 
 def stop_distant_server():
     """

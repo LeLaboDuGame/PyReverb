@@ -1,14 +1,15 @@
 import random
+import sys
+import time
 
 import pygame
 from pygame import Vector2, Surface
 
-import reverb
-from reverb import *
+import PyReverb.reverb as reverb
+from PyReverb.reverb import *
 
 clock = pygame.time.Clock()
 reverb.VERBOSE = 2  # make it speak less
-
 
 @ReverbManager.reverb_object_attribute
 class Bullet(ReverbObject):
@@ -107,55 +108,57 @@ def on_disconnecting(clt: socket.socket, *args):
 
 map_size = (800, 800)
 tick = 60
+if len(sys.argv) > 1:
+    if sys.argv[1] == "CLIENT":  # CLIENT
+        pygame.init()
+        screen: Surface = pygame.display.set_mode(map_size)
+        is_running = True
+        print("Pygame is init !")
+        process = None
 
-if sys.argv[1] == "CLIENT":  # CLIENT
-    pygame.init()
-    screen: Surface = pygame.display.set_mode(map_size)
-    is_running = True
-    print("Pygame is init !")
-    process = None
+        ReverbManager.REVERB_SIDE = ReverbSide.CLIENT
+        clt = Client()
+        ReverbManager.REVERB_CONNECTION = clt
+        clt.connect()
 
-    ReverbManager.REVERB_SIDE = ReverbSide.CLIENT
-    clt = Client()
-    ReverbManager.REVERB_CONNECTION = clt
-    clt.connect()
+        while is_running and ReverbManager.REVERB_CONNECTION.is_connected:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    is_running = False
 
-    while is_running and ReverbManager.REVERB_CONNECTION.is_connected:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                is_running = False
+            screen.fill("purple")
 
-        screen.fill("purple")
+            for p in ReverbManager.get_all_ro_by_type(Player):
+                pygame.draw.circle(screen, p.color.get(), tuple(p.pos.get()), 3)
 
-        for p in ReverbManager.get_all_ro_by_type(Player):
-            pygame.draw.circle(screen, p.color.get(), tuple(p.pos.get()), 3)
+            for b in ReverbManager.get_all_ro_by_type(Bullet):
+                pygame.draw.line(screen, b.color.get(), Vector2(b.pos.get()) - Vector2(b.dir.get()),
+                                 Vector2(b.pos.get()) + Vector2(b.dir.get()), 1)
 
-        for b in ReverbManager.get_all_ro_by_type(Bullet):
-            pygame.draw.line(screen, b.color.get(), Vector2(b.pos.get()) - Vector2(b.dir.get()),
-                             Vector2(b.pos.get()) + Vector2(b.dir.get()), 1)
-
-        pygame.display.flip()
-        clock.tick(tick)
-
-    print("Closing the game...")
-    pygame.quit()
-    clt.disconnect()
-    # Stop distant server
-    if ReverbManager.IS_HOST:
-        stop_distant_server()
-elif sys.argv[1] == "SERVER":  # SERVER
-    print(f"Launched with args: {sys.argv}")
-    ReverbManager.REVERB_SIDE = ReverbSide.SERVER
-    serv = Server()
-    ReverbManager.REVERB_CONNECTION = serv
-    serv.start_server()
-    while True:
-        try:
+            pygame.display.flip()
             clock.tick(tick)
-            ReverbManager.server_sync()
-        except KeyboardInterrupt:
-            serv.stop_server()
-            break
+
+        print("Closing the game...")
+        pygame.quit()
+        clt.disconnect()
+        # Stop distant server
+        if ReverbManager.IS_HOST:
+            stop_distant_server()
+    elif sys.argv[1] == "SERVER":  # SERVER
+        print(f"Launched with args: {sys.argv}")
+        ReverbManager.REVERB_SIDE = ReverbSide.SERVER
+        serv = Server()
+        ReverbManager.REVERB_CONNECTION = serv
+        serv.start_server()
+        while True:
+            try:
+                clock.tick(tick)
+                ReverbManager.server_sync()
+            except KeyboardInterrupt:
+                serv.stop_server()
+                break
+    else:
+        print(f"You passed {sys.argv} as parameter, This is wrong")
 else:
     print(f"Reverb game launch without any argument !\n"
-          f"You need to start it with 1 for Server or 2 for Client")
+          f"You need to start it with 'SERVER' for Server or 'CLIENT' for Client", )
