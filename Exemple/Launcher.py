@@ -1,6 +1,6 @@
 import time
 
-from PyReverb.reverb import start_distant, ReverbSide
+from reverb import start_distant, ReverbSide
 VENV_ACTIVATE_PATH = "../../.venv/bin/activate"
 print(ReverbSide.SERVER.name)
 choice = input("Is the host? (Y|n)>>>")
@@ -12,4 +12,3 @@ if choice == "Y" or choice == "":
     is_host = True
 
 start_distant("./Game.py", ReverbSide.CLIENT.name, VENV_ACTIVATE_PATH, is_host)
-time.sleep(0.5)

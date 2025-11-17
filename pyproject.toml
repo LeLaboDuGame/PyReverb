@@ -1,0 +1,9 @@
+[project]
+name = "reverb"
+version = "1.5.0"
+description = "Multiplayer library"
+authors = [{ name="Labo" }]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

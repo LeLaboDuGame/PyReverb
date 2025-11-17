@@ -8,8 +8,8 @@ import uuid
 from enum import Enum
 from typing import Type, TypeVar
 
-from PyReverb.reverb_errors import *
-from PyReverb.reverb_kernel import *
+from reverb_errors import *
+from reverb_kernel import *
 
 T = TypeVar("T")
 

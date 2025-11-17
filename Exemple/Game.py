@@ -5,8 +5,8 @@ import time
 import pygame
 from pygame import Vector2, Surface
 
-import PyReverb.reverb as reverb
-from PyReverb.reverb import *
+import reverb as reverb
+from reverb import *
 
 clock = pygame.time.Clock()
 reverb.VERBOSE = 2  # make it speak less
