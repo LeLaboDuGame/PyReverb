@@ -278,7 +278,7 @@ class Server:
         self.port = port
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.is_online = False
-        self.clients = {}
+        self.clients: dict[tuple[str, int], socket.socket] = {}
 
     @staticmethod
     def print_server(msg):

@@ -1,7 +1,5 @@
 import atexit
 import os.path
-import platform
-import shutil
 import subprocess
 import time
 import uuid
@@ -21,12 +19,17 @@ PATH_LOG = "./logs/server.log"
 - 0: Stop verbosing
 """
 
+AUTO_CLOSE = False
+"""
+Set to True to make the server closed if he see a shutdown.flag
+"""
+
 
 def handle_exit():
     """
     Trigger on exit
     """
-    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER and AUTO_CLOSE:
         save_logs(PATH_LOG)
 
 
@@ -38,7 +41,7 @@ def check_for_shutdown_flag():
     - rigger an exit on windows if the shutdown.flag is saw
     - Will not trigger any atexit event
     """
-    while True:
+    while True and AUTO_CLOSE:
         time.sleep(1)
         if os.path.exists("./shutdown.flag") and ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
             print("Receiving a shutdown flag closing...")
@@ -97,7 +100,7 @@ class SyncVar:
                 func(old, val)
 
 
-def start_distant(file, side: str, venv_activate_path:str, is_host=False, *args, **kwargs):
+def start_distant(file, side: str, is_host=False, *args, **kwargs):
     """
     Sart a process of the game with his side.
     :param file: The name of the file to be executed
@@ -105,8 +108,10 @@ def start_distant(file, side: str, venv_activate_path:str, is_host=False, *args,
     :param is_host: Set to true if the client (and only for client) is the host
     :param args: More arguments
     :param kwargs: More dict arguments
+    :return: The process
     """
-    subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
+    return subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
+
 
 def stop_distant_server():
     """

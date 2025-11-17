@@ -1,9 +1,19 @@
 [project]
-name = "reverb"
+name = "pyreverb"
 version = "1.5.0"
 description = "Multiplayer library"
 authors = [{ name="Labo" }]
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "Apache License Version 2.0", email = "ad2015adrien@gmail.com"}
 
+dependencies = [
+    "colorama",
+    "pygame"
+]
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

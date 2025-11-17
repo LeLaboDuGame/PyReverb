@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="PyReverb Banner">
+  <img src="src/pyreverb/assets/banner.png" alt="PyReverb Banner">
 </p>
 
 # PyReverb
@@ -75,14 +75,15 @@ python Game.py
 ## Usage Example
 
 ```python
-from reverb import ReverbManager, ReverbSide, ReverbObject, Client, Server
+from pyreverb.reverb import ReverbManager, ReverbSide, ReverbObject, Client, Server
 
 # On the server side:
 ReverbManager.REVERB_SIDE = ReverbSide.SERVER
 
+
 @ReverbManager.reverb_object_attribute
 class Player(ReverbObject):
-    def __init__(self, pos=[0,0], uid=None, add_on_init=True):
+    def __init__(self, pos=[0, 0], uid=None, add_on_init=True):
         self.pos = pos
         super().__init__(pos, uid=uid, add_on_init=add_on_init)
 
@@ -91,6 +92,7 @@ class Player(ReverbObject):
 
     def on_init_from_server(self):
         print("Player initialized on server")
+
 
 server = Server()
 ReverbManager.REVERB_CONNECTION = server
