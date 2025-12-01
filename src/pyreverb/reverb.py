@@ -1,18 +1,27 @@
 import atexit
 import os.path
+import platform
 import subprocess
 import time
 import uuid
 from enum import Enum
 from typing import Type, TypeVar
 
-from reverb_errors import *
-from reverb_kernel import *
+from .reverb_errors import *
+from .reverb_kernel import *
 
 T = TypeVar("T")
 
 VERBOSE = 2
 PATH_LOG = "./logs/server.log"
+if platform.system() == "Windows":
+    PATH_SHUTDOWN_FLAG = "%appdata%/pyreverb/"
+elif platform.system() == "Linux":
+    PATH_SHUTDOWN_FLAG = "/pyreverb/"
+else:
+    PATH_SHUTDOWN_FLAG = None
+
+
 """
 - 2: Full verbose
 - 1: Only some things
@@ -43,9 +52,9 @@ def check_for_shutdown_flag():
     """
     while True and AUTO_CLOSE:
         time.sleep(1)
-        if os.path.exists("./shutdown.flag") and ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+        if os.path.exists(f"{PATH_SHUTDOWN_FLAG}./shutdown.flag") and ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
             print("Receiving a shutdown flag closing...")
-            os.remove("./shutdown.flag")
+            os.remove(f"{PATH_SHUTDOWN_FLAG}./shutdown.flag")
             save_logs()
             os._exit(0)
 
@@ -110,6 +119,26 @@ def start_distant(file, side: str, is_host=False, *args, **kwargs):
     :param kwargs: More dict arguments
     :return: The process
     """
+    system = platform.system()
+    if system == "Windows":
+        subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs), creationflags=subprocess.CREATE_NEW_CONSOLE)
+    elif system == "Linux":
+        terms = [
+            ["gnome-terminal", "--"],
+            ["konsole", "-e"],
+            ["xterm", "-e"],
+            ["qterminal", "-e"]
+        ]
+        for term in terms:
+            try:
+                subprocess.Popen(term + ["python3", file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
+                return
+            except FileNotFoundError:
+                continue
+        raise RuntimeError(f"No terminal found: {[t[0] for t in terms]}")
+
+    else:
+        raise OSError("Unsupported OS!")
     return subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
 
 
@@ -117,7 +146,7 @@ def stop_distant_server():
     """
     Called to generate a shutdown.flag file to shut down the server if he is on a subprocess
     """
-    open("./shutdown.flag", "w").close()
+    open(f"{PATH_SHUTDOWN_FLAG}/shutdown.flag", "w").close()
 
 
 def check_if_json_serializable(*args: SyncVar):

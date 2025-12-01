@@ -12,8 +12,12 @@ dependencies = [
     "pygame"
 ]
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.urls]
+"Homepage" = "https://github.com/LeLaboDuGame/PyReverb"
+"Source" = "https://github.com/LeLaboDuGame/PyReverb"

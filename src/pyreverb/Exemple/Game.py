@@ -3,11 +3,12 @@ import random
 import pygame
 from pygame import Vector2, Surface
 
-from pyreverb import reverb as reverb
+from pyreverb import reverb
 from pyreverb.reverb import *
 
 clock = pygame.time.Clock()
 reverb.VERBOSE = 2  # make it speak less
+
 
 @ReverbManager.reverb_object_attribute
 class Bullet(ReverbObject):
