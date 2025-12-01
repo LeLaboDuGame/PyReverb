@@ -1,5 +1,4 @@
 import atexit
-import os.path
 import platform
 import subprocess
 import time
@@ -13,14 +12,10 @@ from .reverb_kernel import *
 T = TypeVar("T")
 
 VERBOSE = 2
-PATH_LOG = "./logs/server.log"
-if platform.system() == "Windows":
-    PATH_SHUTDOWN_FLAG = "%appdata%/pyreverb/"
-elif platform.system() == "Linux":
-    PATH_SHUTDOWN_FLAG = "/pyreverb/"
-else:
-    PATH_SHUTDOWN_FLAG = None
+WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
+PATH_LOG = f"{WORKING_DIR}/logs/server.log"
 
+SERVER_PROCESS: subprocess.Popen = None
 
 """
 - 2: Full verbose
@@ -28,44 +23,66 @@ else:
 - 0: Stop verbosing
 """
 
-AUTO_CLOSE = False
-"""
-Set to True to make the server closed if he see a shutdown.flag
-"""
-
 
 def handle_exit():
     """
     Trigger on exit
     """
-    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER and AUTO_CLOSE:
+    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
         save_logs(PATH_LOG)
 
 
 atexit.register(handle_exit)
 
 
-def check_for_shutdown_flag():
-    """
-    - rigger an exit on windows if the shutdown.flag is saw
-    - Will not trigger any atexit event
-    """
-    while True and AUTO_CLOSE:
-        time.sleep(1)
-        if os.path.exists(f"{PATH_SHUTDOWN_FLAG}./shutdown.flag") and ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
-            print("Receiving a shutdown flag closing...")
-            os.remove(f"{PATH_SHUTDOWN_FLAG}./shutdown.flag")
-            save_logs()
-            os._exit(0)
-
-
-# Start the thread that checks a shutdown flag
-threading.Thread(target=check_for_shutdown_flag, daemon=True).start()
-
-
 class ReverbSide(Enum):
     SERVER = 1
     CLIENT = 2
+
+
+def start_distant(file, *args, **kwargs) -> subprocess.Popen:
+    """
+    Sart a process of the game with his side.
+    :param file: The name of the file to be executed
+    :param args: More argues
+    :param kwargs: More dict arguments
+    :return: The process
+    """
+    system = platform.system()
+    if system == "Windows":
+        print("Starting distant file on Windows")
+        return subprocess.Popen([sys.executable, file] + list(args) + list(kwargs),
+                         creationflags=subprocess.CREATE_NEW_CONSOLE)
+    elif system == "Linux":
+        terms = [
+            ["gnome-terminal", "--"],
+            ["konsole", "-e"],
+            ["xterm", "-e"],
+            ["qterminal", "-e"]
+        ]
+        for term in terms:
+            try:
+                return subprocess.Popen(term + ["python3", file] + list(args) + list(kwargs))
+            except FileNotFoundError:
+                continue
+        raise RuntimeError(f"No terminal found: {[t[0] for t in terms]}")
+
+    else:
+        raise OSError("Unsupported OS!")
+
+
+def stop_subprocess(sub: subprocess.Popen = None):
+    """
+    Stop a process
+    :param sub: The subprocess
+    """
+    if sub and sub.poll() is None:
+        sub.terminate()
+        sub.wait()
+        print("Server Closed!")
+    else:
+        warn(
+            "You try to stop the process with a None subprocess! By default the subprocess is reverb.SERVER_PROCESS, set it to the server process before run it again if args is let by default.")
 
 
 class SyncVar:
@@ -109,46 +126,6 @@ class SyncVar:
                 func(old, val)
 
 
-def start_distant(file, side: str, is_host=False, *args, **kwargs):
-    """
-    Sart a process of the game with his side.
-    :param file: The name of the file to be executed
-    :param side: The side to start
-    :param is_host: Set to true if the client (and only for client) is the host
-    :param args: More arguments
-    :param kwargs: More dict arguments
-    :return: The process
-    """
-    system = platform.system()
-    if system == "Windows":
-        subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs), creationflags=subprocess.CREATE_NEW_CONSOLE)
-    elif system == "Linux":
-        terms = [
-            ["gnome-terminal", "--"],
-            ["konsole", "-e"],
-            ["xterm", "-e"],
-            ["qterminal", "-e"]
-        ]
-        for term in terms:
-            try:
-                subprocess.Popen(term + ["python3", file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
-                return
-            except FileNotFoundError:
-                continue
-        raise RuntimeError(f"No terminal found: {[t[0] for t in terms]}")
-
-    else:
-        raise OSError("Unsupported OS!")
-    return subprocess.Popen([sys.executable, file, side, "1" if is_host else "0"] + list(args) + list(kwargs))
-
-
-def stop_distant_server():
-    """
-    Called to generate a shutdown.flag file to shut down the server if he is on a subprocess
-    """
-    open(f"{PATH_SHUTDOWN_FLAG}/shutdown.flag", "w").close()
-
-
 def check_if_json_serializable(*args: SyncVar):
     for arg in args:
         try:
@@ -185,7 +162,7 @@ class ReverbObject:
         """
         sync_vars = []
         for arg in list(self.__dict__.values())[:len(self.reverb_args)]:
-            if isinstance(type(arg), type(SyncVar)):
+            if isinstance(arg, SyncVar):
                 val = (arg.get(get_only_if_changed) if get_value else arg)
                 sync_vars += ([val] if not get_only_if_changed else ([val] if arg.has_changed else []))
                 if get_only_if_changed:
