@@ -79,8 +79,7 @@ Requirements:
 - `virtualenv` or another virtual environment tool (recommended)
 
 Inside your virtual environment:
-```
-bash
+```bash
 git clone https://github.com/LeLaboDuGame/PyReverb.git
 cd PyReverb
 
@@ -108,8 +107,7 @@ Below is a minimal end‑to‑end example showing:
 > The code is written as if you split it into three files: `shared_objects.py`, `server.py`, and `client.py` inside your project.
 
 ### 1. Define a networked object
-```
-python
+```python
 # shared_objects.py
 from pyreverb.reverb import ReverbManager, ReverbSide, ReverbObject
 
@@ -134,8 +132,7 @@ class Player(ReverbObject):
         print(f"[CLIENT] Player {self.uid} spawned at {self.pos}")
 ```
 ### 2. Minimal server
-```
-python
+```python
 # server.py
 from pyreverb.reverb import ReverbManager, ReverbSide, Server
 from shared_objects import Player  # noqa: F401 - ensure class is registered
@@ -170,8 +167,7 @@ if __name__ == "__main__":
     main()
 ```
 ### 3. Minimal client
-```
-python
+```python
 # client.py
 from pyreverb.reverb import ReverbManager, ReverbSide, Client
 from shared_objects import Player  # noqa: F401 - ensure class is registered
@@ -217,8 +213,7 @@ For more advanced usage (multiple object types, more complex logic, etc.), you c
 PyReverb uses an event-driven core so that you can react to network events without constantly polling everything manually.
 
 A simplified usage pattern looks like this:
-```
-python
+```python
 from pyreverb.reverb import ReverbManager
 
 kernel = ReverbManager.get_kernel()
