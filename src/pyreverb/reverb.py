@@ -1,7 +1,6 @@
 import atexit
 import platform
 import subprocess
-import time
 import uuid
 from enum import Enum
 from typing import Type, TypeVar
@@ -13,7 +12,8 @@ T = TypeVar("T")
 
 VERBOSE = 2
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
-PATH_LOG = f"{WORKING_DIR}/logs/server.log"
+print(WORKING_DIR)
+PATH_LOG = f"{WORKING_DIR}/logs/"
 
 SERVER_PROCESS: subprocess.Popen = None
 
@@ -24,15 +24,7 @@ SERVER_PROCESS: subprocess.Popen = None
 """
 
 
-def handle_exit():
-    """
-    Trigger on exit
-    """
-    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
-        save_logs(PATH_LOG)
 
-
-atexit.register(handle_exit)
 
 
 class ReverbSide(Enum):
@@ -52,7 +44,7 @@ def start_distant(file, *args, **kwargs) -> subprocess.Popen:
     if system == "Windows":
         print("Starting distant file on Windows")
         return subprocess.Popen([sys.executable, file] + list(args) + list(kwargs),
-                         creationflags=subprocess.CREATE_NEW_CONSOLE)
+                                creationflags=subprocess.CREATE_NEW_CONSOLE)
     elif system == "Linux":
         terms = [
             ["gnome-terminal", "--"],
@@ -74,6 +66,7 @@ def start_distant(file, *args, **kwargs) -> subprocess.Popen:
 def stop_subprocess(sub: subprocess.Popen = None):
     """
     Stop a process
+    DON'T SAVE LOG IF SERVER IS CLOSED ON WINDOWS WITH THIS METHODE!!!
     :param sub: The subprocess
     """
     if sub and sub.poll() is None:
@@ -282,6 +275,9 @@ class ReverbManager:
     REVERB_CONNECTION: Client | Server = None  # Client, or Server
     REVERB_OBJECTS: dict[str, ReverbObject] = {}
     REVERB_OBJECT_REGISTRY = {"ReverbObject": ReverbObject}  # Register all type
+    ADMIN_KEY = random.randint(1000, 10000)
+    ADMINS = []
+
     try:
         IS_HOST = sys.argv[2] == "1"
         """Set to true automatically if is_host param passed as param otherwise False"""
@@ -305,6 +301,72 @@ class ReverbManager:
             ReverbManager.REVERB_OBJECT_REGISTRY[ro.__name__] = ro
             if VERBOSE >= 1:
                 ReverbManager.print_manager(f"Adding type '{ro.__name__}' to the registry.")
+
+    @staticmethod
+    @server_event_registry.on_event("stop_server_admin")
+    def on_stop_server_admin(clt: socket.socket):
+        """
+        - Call on the 'SEVER' side
+        - Shutdown the server!
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+            if clt in ReverbManager.ADMINS:
+                ReverbManager.print_manager("An admin stop the server!")
+                ReverbManager.REVERB_CONNECTION.stop_server()
+                save_logs(PATH_LOG)
+                os._exit(0)
+            else:
+                ReverbManager.print_manager("A user tried to stop the server without admin rights!")
+        else:
+            raise ReverbWrongSideError(ReverbSide.SERVER)
+
+    @staticmethod
+    def stop_server_admin():
+        """
+        - Call on the 'CLIENT' side
+        - Send a package to stop the server. Only stop if the client is registered as an admin.
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
+            ReverbManager.REVERB_CONNECTION.send("stop_server_admin")
+        else:
+            raise ReverbWrongSideError(ReverbSide.CLIENT)
+
+    @staticmethod
+    def log_as_admin(key: int):
+        """
+        - Call on the 'CLIENT' side only
+        - Try to grant admin right to the client
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
+            ReverbManager.REVERB_CONNECTION.send("grant_admin", key)
+        else:
+            raise ReverbWrongSideError(ReverbSide.CLIENT)
+
+    @staticmethod
+    @server_event_registry.on_event("grant_admin")
+    def on_grant_admin(clt: socket.socket, key):
+        """
+        - Call on the 'SERVER' side
+        - Grant admin right to a client
+        :param key: Admin key sent by the client
+        """
+        response = "REFUSED"
+        if key == ReverbManager.ADMIN_KEY and clt not in ReverbManager.ADMINS:
+            ReverbManager.ADMINS.append(clt)
+            ReverbManager.print_manager(f"The user '{clt.getpeername()[0]}' has been successfully granted to admin!")
+            response = "GRANTED"
+        else:
+            ReverbManager.print_manager(
+                f"WARNING: The user '{clt.getpeername()[0]}' tried to connect as admin but with wrong ADMIN_KEY or is already an admin!")
+        ReverbManager.REVERB_CONNECTION.send_to(clt, "grant_admin_response", response)
+
+    @staticmethod
+    @client_event_registry.on_event("grant_admin_response")
+    def on_grant_admin_response(clt: socket.socket, response):
+        if response == "GRANTED":
+            ReverbManager.print_manager(f"Successfully granted to admin!")
+        elif response == "REFUSED":
+            ReverbManager.print_manager(f"The server refused the admin right to you! (Wrong key or already admin)")
 
     @staticmethod
     def server_sync():
@@ -554,3 +616,14 @@ class ReverbManager:
         else:
             raise TypeError(f"The class {cls} must be derivative from a ReverbObject!")
         return cls
+
+
+def handle_exit():
+    """
+    Trigger on exit
+    """
+    if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+        save_logs(PATH_LOG)
+
+
+atexit.register(handle_exit)

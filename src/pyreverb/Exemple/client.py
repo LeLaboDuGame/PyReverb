@@ -9,7 +9,7 @@ clock = pygame.time.Clock()
 reverb.VERBOSE = 2  # make it speak less
 
 
-def start_client(is_host=False):
+def start_client(is_host=False, port=8080, admin_key: int = 1000):
     pygame.init()
     screen: Surface = pygame.display.set_mode(MAP_SIZE)
     is_running = True
@@ -17,9 +17,10 @@ def start_client(is_host=False):
 
     ReverbManager.IS_HOST = is_host
     ReverbManager.REVERB_SIDE = ReverbSide.CLIENT
-    clt = Client()
+    clt = Client(port=port)
     ReverbManager.REVERB_CONNECTION = clt
     clt.connect()
+    ReverbManager.log_as_admin(admin_key)
 
     while is_running and ReverbManager.REVERB_CONNECTION.is_connected:
         for event in pygame.event.get():
@@ -40,10 +41,12 @@ def start_client(is_host=False):
 
     print("Closing the game...")
     pygame.quit()
-    clt.disconnect()
-    # Stop distant server
     if ReverbManager.IS_HOST:
-        stop_subprocess(reverb.SERVER_PROCESS)
+        ReverbManager.stop_server_admin()
+    else:
+        clt.disconnect()
+    # Stop distant server
+
 
 
 if __name__ == "__main__":

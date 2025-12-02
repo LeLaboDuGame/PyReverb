@@ -1,4 +1,5 @@
 import socket
+import sys
 
 import pygame.time
 
@@ -22,11 +23,12 @@ def on_disconnecting(clt: socket.socket, *args):
             ReverbManager.remove_reverb_object(p.uid)
 
 
-def start_server():
+def start_server(port: int, admin_key: int):
     print("Starting server...")
     ReverbManager.REVERB_SIDE = ReverbSide.SERVER
-    serv = Server()
+    serv = Server(port=port)
     ReverbManager.REVERB_CONNECTION = serv
+    ReverbManager.ADMIN_KEY = admin_key  # Set the admin key
     serv.start_server()
     while True:
         try:
@@ -39,4 +41,11 @@ def start_server():
 
 if __name__ == "__main__":
     print("Starting server from main!")
-    start_server()
+    port = 8080
+    if len(sys.argv) > 0:
+        port = int(sys.argv[1])
+
+    admin_key = 1000
+    if len(sys.argv) > 1:
+        admin_key = int(sys.argv[2])
+    start_server(port, admin_key)

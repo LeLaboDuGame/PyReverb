@@ -1,11 +1,13 @@
 import datetime
 import json
 import os
+import random
 import re
 import socket
 import struct
 import sys
 import threading
+import time
 from io import StringIO
 from json import JSONDecodeError
 from warnings import warn
@@ -52,12 +54,17 @@ sys.stdout = Tee(sys.__stdout__, log_buffer=log_buffer)
 sys.stderr = Tee(sys.__stderr__, log_buffer=log_buffer)
 
 
-def save_logs(path: str = "./logs/server.log"):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def save_logs(path: str = "./logs/"):
+    file_path = f"{path}/log-{datetime.datetime.now().strftime('%y-%m-%d-%H-%M-%S')}.log"
+
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     print("Saving logs from this process...")
-    with open(path, "w", encoding="utf-16") as log_file:
+    with open(file_path, "w", encoding="utf-16") as log_file:
         log_file.write(log_buffer.getvalue())
-        log_file.write("\nLog saved!")
+        log_file.write("\n\n\nDue to the stoping of the distant server (if it is the case), sometime logs can have error at the end!\n"
+                       "It is normal because when the server stop some thread are continuously open.\n"
+                       "Disconnecting the server make them crash! BUT IT IS NORMAL (normally normal it depends sometimes it is bad xd)\n"
+                       "Nevertheless examined them is a good things (you can have real errors!)")
         log_file.close()
     print("Log saved!")
 
@@ -145,12 +152,15 @@ class Packet:
     @staticmethod
     def recv_exact(sock: socket.socket, n: int):
         data = b""
-        while len(data) < n:
-            chunk = sock.recv(n - len(data))
-            if not chunk:
-                raise ConnectionError("The socket is close...")
-            data += chunk
-        return data
+        try:
+            while len(data) < n:
+                chunk = sock.recv(n - len(data))
+                if not chunk:
+                    raise ConnectionError("The socket is close...")
+                data += chunk
+            return data
+        except ConnectionAbortedError:
+            return b""
 
     @staticmethod
     def decode_packet(packet: bytes):
@@ -269,7 +279,7 @@ class Server:
     - A class that open a Server
     """
 
-    def __init__(self, host="", port=8080):
+    def __init__(self, host="", port=8080, ):
         """
         :param host: The ip. Let it him by default
         :param port: The listen port!
@@ -317,7 +327,7 @@ class Server:
         Server.print_server("Server closed !")
 
     def _accept_clients(self):
-        """Thread that accept clients when they connect to the server"""
+        """Thread that accepts clients when they connect to the server"""
         try:
             while self.is_online:
                 client_socket, addr = self.server.accept()
@@ -326,6 +336,8 @@ class Server:
                 threading.Thread(target=self._handle_client, args=(client_socket, addr), daemon=True).start()
         except KeyboardInterrupt:
             self.stop_server()
+        except OSError:
+            pass
         finally:
             Server.print_server("Server stop listening to new clients !")
 
@@ -376,6 +388,8 @@ class Server:
             clt.sendall(header + packet)
         except BrokenPipeError:
             warn(f"The client was disconnect during a sending operation: {clt.getpeername()}")
+        except OSError:
+            warn("The server is certainly closing...")
         except ConnectionResetError:
             warn(f"A client was disconnect during a sending operation!")
 
