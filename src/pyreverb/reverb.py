@@ -47,10 +47,10 @@ def start_distant(file, *args, **kwargs) -> subprocess.Popen:
                                 creationflags=subprocess.CREATE_NEW_CONSOLE)
     elif system == "Linux":
         terms = [
+            ["qterminal", "-e"],
             ["gnome-terminal", "--"],
             ["konsole", "-e"],
             ["xterm", "-e"],
-            ["qterminal", "-e"]
         ]
         for term in terms:
             try:

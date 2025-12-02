@@ -1,11 +1,10 @@
 import socket
 import sys
-
 import pygame.time
 
 from pyreverb.Exemple.shooter_objects import Player, TICK
-from pyreverb.reverb import ReverbManager, ReverbSide
-from pyreverb.reverb_kernel import server_event_registry, Server
+from pyreverb.reverb import ReverbManager, ReverbSide, PATH_LOG
+from pyreverb.reverb_kernel import server_event_registry, Server, save_logs
 
 clock = pygame.time.Clock()
 
@@ -37,15 +36,18 @@ def start_server(port: int, admin_key: int):
         except KeyboardInterrupt:
             serv.stop_server()
             break
+        except:
+            print("ERROR CLOSE")
+            save_logs(PATH_LOG)
 
 
 if __name__ == "__main__":
     print("Starting server from main!")
     port = 8080
-    if len(sys.argv) > 0:
+    if len(sys.argv) > 1:
         port = int(sys.argv[1])
 
     admin_key = 1000
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2:
         admin_key = int(sys.argv[2])
     start_server(port, admin_key)

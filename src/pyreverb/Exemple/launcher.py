@@ -5,12 +5,12 @@ from pyreverb import reverb
 from pyreverb.Exemple.client import start_client
 from pyreverb.reverb import start_distant, ReverbSide
 
-PORT = 26010
+PORT = 8080
 ADMIN_KEY = 1001
 
 if __name__ == "__main__":
     work_dir = os.path.dirname(os.path.abspath(__file__))
-    print(ReverbSide.SERVER.name)
+    print(work_dir)
     choice = input("Is the host? (Y|n)>>>")
     is_host = False
     pid = ""
