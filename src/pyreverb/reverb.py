@@ -1,6 +1,8 @@
 import atexit
 import platform
+import random
 import subprocess
+import time
 import uuid
 from enum import Enum
 from typing import Type, TypeVar
@@ -12,19 +14,13 @@ T = TypeVar("T")
 
 VERBOSE = 2
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
-print(WORKING_DIR)
 PATH_LOG = f"{WORKING_DIR}/logs/"
-
-SERVER_PROCESS: subprocess.Popen = None
 
 """
 - 2: Full verbose
 - 1: Only some things
 - 0: Stop verbosing
 """
-
-
-
 
 
 class ReverbSide(Enum):

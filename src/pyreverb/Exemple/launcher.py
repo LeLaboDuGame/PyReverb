@@ -15,8 +15,7 @@ if __name__ == "__main__":
     is_host = False
     pid = ""
     if choice == "Y" or choice == "":
-        reverb.SERVER_PROCESS = start_distant(work_dir + "/server.py", str(PORT), str(ADMIN_KEY))
-        print(f"SERVER PROCESS:{reverb.SERVER_PROCESS}")
+        start_distant(work_dir + "/server.py", str(PORT), str(ADMIN_KEY))
         print("Starting client in 1 second...")
         time.sleep(1)
         is_host = True

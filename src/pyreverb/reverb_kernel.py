@@ -1,13 +1,11 @@
 import datetime
 import json
 import os
-import random
 import re
 import socket
 import struct
 import sys
 import threading
-import time
 from io import StringIO
 from json import JSONDecodeError
 from warnings import warn
@@ -61,10 +59,11 @@ def save_logs(path: str = "./logs/"):
     print("Saving logs from this process...")
     with open(file_path, "w", encoding="utf-16") as log_file:
         log_file.write(log_buffer.getvalue())
-        log_file.write("\n\n\nDue to the stoping of the distant server (if it is the case), sometime logs can have error at the end!\n"
-                       "It is normal because when the server stop some thread are continuously open.\n"
-                       "Disconnecting the server make them crash! BUT IT IS NORMAL (normally normal it depends sometimes it is bad xd)\n"
-                       "Nevertheless examined them is a good things (you can have real errors!)")
+        log_file.write(
+            "\n\n\nDue to the stoping of the distant server (if it is the case), sometime logs can have error at the end!\n"
+            "It is normal because when the server stop some threads are continuously opened.\n"
+            "Closed the server make them crash! BUT IT IS NORMAL (normally normal it depends sometimes it is bad xd)\n"
+            "Nevertheless examined them is a good things (you can have real errors!)")
         log_file.close()
     print("Log saved!")
 
@@ -198,13 +197,14 @@ class Client:
         """
         self.port = port
         self.ip = ip
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client: socket.socket = None
         self.is_connected = False
 
     def connect(self):
         """
         Call to connect to the server
         """
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.client.connect((self.ip, self.port))
             self.is_connected = True
@@ -241,6 +241,10 @@ class Client:
                 except ConnectionResetError:
                     Client.print_client("Connection lost !")
                     break
+                except Exception as e:
+                    if self.is_connected:
+                        raise Exception(f"THIS IS NOT NORMAL:\n{e}")
+
         finally:
             self.disconnect()
 
@@ -260,6 +264,9 @@ class Client:
                 warn("The client has been disconnected during a sending operation!")
             except ConnectionResetError:
                 warn("Server close or client disconnected during a sending operation!")
+            except Exception as e:
+                if self.is_connected:
+                    raise Exception(f"THIS IS NOT NORMAL DURING A SEND OPERATION:\n{e}")
 
     def disconnect(self):
         """
@@ -272,6 +279,7 @@ class Client:
                 self.is_connected = False
                 client_event_registry.trigger("disconnection", self.client)
                 Client.print_client("Client close and disconnect from the server !")
+                self.client.close()  # Close the client
 
     @staticmethod
     def print_client(msg):
@@ -324,7 +332,8 @@ class Server:
         """
         self.is_online = False
         packet = Packet.create_packet("server_stop")
-        for client in self.clients.values():
+        clts = list(self.clients.values())  # To avoid bugs
+        for client in clts:
             client.send(packet)
             Server.print_server(f"The client: {client.getpeername()} is disconnect !")
             client.close()
@@ -372,6 +381,9 @@ class Server:
                 server_event_registry.trigger("client_disconnection", client_socket, threading_event=False)
                 Server.print_server(f"The client at address: {addr} has been disconnected ! This is an anomaly.")
                 break
+            except Exception as e:
+                if self.is_online:
+                    print(f"THIS IS NOT NORMAL: {e}")
 
         if addr in self.clients:
             self.clients.pop(addr)
@@ -397,7 +409,7 @@ class Server:
         except BrokenPipeError:
             warn(f"The client was disconnect during a sending operation: {clt.getpeername()}")
         except OSError:
-            warn("The server is certainly closing...")
+            warn("The server is certainly closed...")
         except ConnectionResetError:
             warn(f"A client was disconnect during a sending operation!")
 
