@@ -77,6 +77,16 @@ class EventRegistry:
     def __init__(self):
         self._events = {}
 
+    def add_event(self, func, event_name):
+        """
+        Add an event to the EventRegistry
+        :param func: The function
+        :param event_name: The name of the event
+        """
+        if event_name not in self._events:
+            self._events[event_name] = []
+        self._events[event_name].append(func)
+
     def on_event(self, event_name):
         """
         Simple decorator to trigger events
@@ -85,9 +95,7 @@ class EventRegistry:
         """
 
         def decorator(func):
-            if event_name not in self._events:
-                self._events[event_name] = []
-            self._events[event_name].append(func)
+            self.add_event(func, event_name)
             return func
 
         return decorator
