@@ -231,6 +231,8 @@ class Client:
                     if packet:
                         packet_name, contents = Packet.decode_packet(packet)
                         if packet_name == "server_stop":
+                            client_event_registry.trigger(packet_name, self.client,
+                                                          *contents)  # Trigger the event linked to the message of the server
                             Client.print_client("Server stopped !")
                             break
                         client_event_registry.trigger(packet_name, self.client,
