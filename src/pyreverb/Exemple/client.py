@@ -9,6 +9,11 @@ clock = pygame.time.Clock()
 reverb.VERBOSE = 2  # make it speak less
 
 
+@client_event_registry.on_event("server_stop")
+def test():
+    print("STOP")
+
+
 def start_client(is_host=False, port=8080, admin_key: int = 1000):
     pygame.init()
     screen: Surface = pygame.display.set_mode(MAP_SIZE)
@@ -40,13 +45,12 @@ def start_client(is_host=False, port=8080, admin_key: int = 1000):
         clock.tick(TICK)
 
     print("Closing the game...")
-    pygame.quit()
     if ReverbManager.IS_HOST:
         ReverbManager.stop_server_admin()
+        pygame.quit()
     else:
         clt.disconnect()
     # Stop distant server
-
 
 
 if __name__ == "__main__":

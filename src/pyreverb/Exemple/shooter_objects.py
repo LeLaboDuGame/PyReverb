@@ -14,6 +14,7 @@ clock = pygame.time.Clock()
 @ReverbManager.reverb_object_attribute
 class Bullet(ReverbObject):
     def __init__(self, pos, dir, color, belonging_membership: int = None):
+        print(pos, dir, color)
         self.pos = SyncVar(pos)
         self.dir = SyncVar(dir)
         self.color = SyncVar(color)

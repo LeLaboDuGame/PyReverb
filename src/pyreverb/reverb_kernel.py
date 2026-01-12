@@ -6,6 +6,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 from io import StringIO
 from json import JSONDecodeError
 from warnings import warn
@@ -244,8 +245,7 @@ class Client:
                     Client.print_client("Connection lost !")
                     break
                 except Exception as e:
-                    if self.is_connected:
-                        raise Exception(f"THIS IS NOT NORMAL:\n{e}")
+                    raise Exception(f"THIS IS NOT NORMAL:\n{e}")
 
         finally:
             self.disconnect()
@@ -267,8 +267,7 @@ class Client:
             except ConnectionResetError:
                 warn("Server close or client disconnected during a sending operation!")
             except Exception as e:
-                if self.is_connected:
-                    raise Exception(f"THIS IS NOT NORMAL DURING A SEND OPERATION:\n{e}")
+                raise Exception(f"THIS IS NOT NORMAL DURING A SEND OPERATION:\n{e}")
 
     def disconnect(self):
         """
@@ -333,10 +332,9 @@ class Server:
         Stop the server
         """
         self.is_online = False
-        packet = Packet.create_packet("server_stop")
         clts = list(self.clients.values())  # To avoid bugs
+        self.send_to_all("server_stop")
         for client in clts:
-            client.send(packet)
             Server.print_server(f"The client: {client.getpeername()} is disconnect !")
             client.close()
         Server.print_server("All clients disconnected.")
@@ -384,8 +382,7 @@ class Server:
                 Server.print_server(f"The client at address: {addr} has been disconnected ! This is an anomaly.")
                 break
             except Exception as e:
-                if self.is_online:
-                    print(f"THIS IS NOT NORMAL: {e}")
+                print(f"THIS IS NOT NORMAL: {e}")
 
         if addr in self.clients:
             self.clients.pop(addr)

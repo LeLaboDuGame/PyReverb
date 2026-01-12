@@ -1,5 +1,6 @@
 import socket
 import sys
+
 import pygame.time
 
 from pyreverb.Exemple.shooter_objects import Player, TICK
