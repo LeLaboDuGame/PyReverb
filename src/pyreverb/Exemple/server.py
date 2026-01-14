@@ -37,9 +37,10 @@ def start_server(port: int, admin_key: int):
         except KeyboardInterrupt:
             serv.stop_server()
             break
-        except:
+        except Exception as e:
             print("ERROR CLOSE")
             save_logs(PATH_LOG)
+            raise e
 
 
 if __name__ == "__main__":
