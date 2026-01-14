@@ -1,6 +1,6 @@
 [project]
 name = "pyreverb"
-version = "1.6.6"
+version = "1.6.7"
 description = "Multiplayer library"
 authors = [{ name="Labo" }]
 readme = "README.md"
