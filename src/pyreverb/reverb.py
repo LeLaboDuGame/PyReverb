@@ -535,7 +535,6 @@ class ReverbManager:
                         f"Not enough param passed! You try to construct {cls} but those elements are passed {args}, {ro_data}")
                 ro.uid = uid
                 ReverbManager.add_new_reverb_object(ro)
-                print(ro_data)
                 ro_data = ro_data[2]
             ro.sync(ro_data)
 
