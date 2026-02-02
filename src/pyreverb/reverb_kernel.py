@@ -214,10 +214,14 @@ class Client:
             client_event_registry.trigger("connection", self.client)  # Trigger connection event
         except ConnectionRefusedError:
             Client.print_client("The server is unreachable !")
+            client_event_registry.trigger("connection_refused", self.client)
         except socket.gaierror:
             Client.print_client("Error with host name or IP unfound")
+            client_event_registry.trigger("ip_not_found", self.client)
         except TimeoutError:
             Client.print_client("Connexion TimeOut !")
+            client_event_registry.trigger("connection_timeout", self.client)
+
 
     def listen(self):
         """
