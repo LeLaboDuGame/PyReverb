@@ -87,6 +87,19 @@ class EventRegistry:
             self._events[event_name] = []
         self._events[event_name].append(func)
 
+    def remove_event(self, func):
+        """
+        Remove an event from the EventRegistry
+        :param func: The function
+        :return: True if the function was removed else False
+        """
+        for event_name, funcs in self._events.items():
+            if func in funcs:
+                funcs.remove(func)
+                return True
+        return False
+
+
     def on_event(self, event_name):
         """
         Simple decorator to trigger events
@@ -204,6 +217,7 @@ class Client:
     def connect(self):
         """
         Call to connect to the server
+        :return: True if the connection succeeds else False
         """
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -212,6 +226,7 @@ class Client:
 
             threading.Thread(target=self.listen, daemon=True).start()
             client_event_registry.trigger("connection", self.client)  # Trigger connection event
+            return True
         except ConnectionRefusedError:
             Client.print_client("The server is unreachable !")
             client_event_registry.trigger("connection_refused", self.client)
@@ -220,9 +235,7 @@ class Client:
             client_event_registry.trigger("ip_not_found", self.client)
         except TimeoutError:
             Client.print_client("Connexion TimeOut !")
-            client_event_registry.trigger("connection_timeout", self.client)
-
-
+        return False
     def listen(self):
         """
         Thread that listens for new content from the server
@@ -300,7 +313,7 @@ class Server:
     - A class that open a Server
     """
 
-    def __init__(self, host="", port=8080, ):
+    def __init__(self, host="", port=8080):
         """
         :param host: The ip. Let it him by default
         :param port: The listen port!
