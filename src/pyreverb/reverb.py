@@ -300,6 +300,25 @@ class ReverbManager:
                 ReverbManager.print_manager(f"Adding type '{ro.__name__}' to the registry.")
 
     @staticmethod
+    def get_reverb_objects_by_belonging_membership(belonging_membership: int) -> list[ReverbObject]:
+        """
+        :return: List of all ROs that belong to the client with the given membership
+        """
+        ro_lst = []
+        for ro in ReverbManager.REVERB_OBJECTS.values():
+            ro_lst.append(ro) if ro.belonging_membership == belonging_membership else None
+
+        return ro_lst
+
+    @staticmethod
+    def ros_to_uids(ros: list[ReverbObject]) -> list[str]:
+        """
+        :return: List of all uids of the given ros
+        """
+        return [ro.uid for ro in ros]
+
+
+    @staticmethod
     @server_event_registry.on_event("stop_server_admin")
     def on_stop_server_admin(clt: socket.socket):
         """
