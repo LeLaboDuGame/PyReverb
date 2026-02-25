@@ -219,22 +219,23 @@ class Client:
         Call to connect to the server
         :return: True if the connection succeeds else False
         """
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            self.client.connect((self.ip, self.port))
-            self.is_connected = True
+        if not self.is_connected:
+            self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                self.client.connect((self.ip, self.port))
+                self.is_connected = True
 
-            threading.Thread(target=self.listen, daemon=True).start()
-            client_event_registry.trigger("connection", self.client)  # Trigger connection event
-            return True
-        except ConnectionRefusedError:
-            Client.print_client("The server is unreachable !")
-            client_event_registry.trigger("connection_refused", self.client)
-        except socket.gaierror:
-            Client.print_client("Error with host name or IP unfound")
-            client_event_registry.trigger("ip_not_found", self.client)
-        except TimeoutError:
-            Client.print_client("Connexion TimeOut !")
+                threading.Thread(target=self.listen, daemon=True).start()
+                client_event_registry.trigger("connection", self.client)  # Trigger connection event
+                return True
+            except ConnectionRefusedError:
+                Client.print_client("The server is unreachable !")
+                client_event_registry.trigger("connection_refused", self.client)
+            except socket.gaierror:
+                Client.print_client("Error with host name or IP unfound")
+                client_event_registry.trigger("ip_not_found", self.client)
+            except TimeoutError:
+                Client.print_client("Connexion TimeOut !")
         return False
     def listen(self):
         """
