@@ -66,7 +66,7 @@ def save_logs(path: str = "./logs/"):
             "Closed the server make them crash! BUT IT IS NORMAL (normally normal it depends sometimes it is bad xd)\n"
             "Nevertheless examined them is a good things (you can have real errors!)")
         log_file.close()
-    print("Log saved!")
+    print(f"Log saved in path: {file_path}!")
 
 
 class EventRegistry:
@@ -153,7 +153,6 @@ class EventRegistry:
 
 client_event_registry = EventRegistry()
 server_event_registry = EventRegistry()
-
 
 class Packet:
     """

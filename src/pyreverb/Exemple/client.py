@@ -14,7 +14,7 @@ def test():
     print("STOP")
 
 
-def start_client(is_host=False, port=8080, admin_key: int = 1000):
+def start_client(is_host=False, port=8080, admin_key: int = 1001):
     pygame.init()
     screen: Surface = pygame.display.set_mode(MAP_SIZE)
     is_running = True
@@ -35,11 +35,11 @@ def start_client(is_host=False, port=8080, admin_key: int = 1000):
         screen.fill("purple")
 
         for p in ReverbManager.get_all_ro_by_type(Player):
-            pygame.draw.circle(screen, p.color.get(), tuple(p.pos.get()), 3)
+            pygame.draw.circle(screen, p.color.value, tuple(p.pos.value), 3)
 
         for b in ReverbManager.get_all_ro_by_type(Bullet):
-            pygame.draw.line(screen, b.color.get(), Vector2(b.pos.get()) - Vector2(b.dir.get()),
-                             Vector2(b.pos.get()) + Vector2(b.dir.get()), 1)
+            pygame.draw.line(screen, b.color.value, Vector2(b.pos.value) - Vector2(b.dir.value),
+                             Vector2(b.pos.value) + Vector2(b.dir.value), 1)
 
         pygame.display.flip()
         clock.tick(TICK)

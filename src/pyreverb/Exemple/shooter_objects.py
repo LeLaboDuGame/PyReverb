@@ -14,12 +14,12 @@ clock = pygame.time.Clock()
 @ReverbManager.reverb_object_attribute
 class Bullet(ReverbObject):
     def __init__(self, pos, dir, color, belonging_membership: int = None):
-        print(pos, dir, color)
         self.pos = SyncVar(pos)
         self.dir = SyncVar(dir)
         self.color = SyncVar(color)
         self.speed = 2
-        super().__init__(self.pos, self.dir, self.color, belonging_membership=belonging_membership)
+        super().__init__(init_args=[pos, dir, color], sync_vars={"pos": self.pos, "dir": self.dir, "color": self.color},
+                         belonging_membership=belonging_membership)
 
     def on_init_from_client(self):
         if self.is_owner():
@@ -33,7 +33,7 @@ class Bullet(ReverbObject):
 
     def update(self):
         while self.is_alive:
-            self.pos.set(list(self.pos.get() + Vector2(self.dir.get()) * self.speed))
+            self.pos.value = list(self.pos.value + Vector2(self.dir.value) * self.speed)
             clock.tick(TICK)
 
 
@@ -43,7 +43,8 @@ class Player(ReverbObject):
         self.pos = SyncVar(pos)
         self.dir = SyncVar(dir)
         self.color = SyncVar(color)
-        super().__init__(self.pos, self.dir, self.color, belonging_membership=belonging_membership)
+        super().__init__(init_args=[pos, dir, color], sync_vars={"pos": self.pos, "color": self.color, "dir": self.dir},
+                         belonging_membership=belonging_membership)
 
     def on_init_from_client(self):
         while self.is_alive:
@@ -74,7 +75,7 @@ class Player(ReverbObject):
 
     # ON SERVER
     def check_walk(self, dir):
-        self.dir.set([0, 0])
+        self.dir.value = [0, 0]
         speed = 5
 
         def is_pos_in_map_bound(pos: Vector2):
@@ -82,12 +83,13 @@ class Player(ReverbObject):
 
         for d in dir:
             l_pos = {"Z": (0, -1), "S": (0, 1), "D": (1, 0), "Q": (-1, 0)}
-            self.dir.set(tuple(self.dir.get() + Vector2(l_pos[d])))
+            self.dir.value = list(self.dir.value + Vector2(l_pos[d]))
 
-        new_pos = self.pos.get() + Vector2(self.dir.get()) * speed
+        new_pos = self.pos.value + Vector2(self.dir.value) * speed
         if is_pos_in_map_bound(new_pos):
-            self.pos.set(tuple(new_pos))
+            self.pos.value = list(new_pos)
+
 
     def spawn_bullet(self):
         ReverbManager.add_new_reverb_object(
-            Bullet(self.pos.get(), self.dir.get(), self.color.get(), belonging_membership=self.belonging_membership))
+            Bullet(self.pos.value, self.dir.value, self.color.value, belonging_membership=self.belonging_membership))

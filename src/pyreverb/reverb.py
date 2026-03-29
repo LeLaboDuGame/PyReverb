@@ -3,8 +3,9 @@ import platform
 import random
 import subprocess
 import uuid
+import warnings
 from enum import Enum
-from typing import Type, TypeVar
+from typing import Type, TypeVar, Any, Generic, Callable, List
 
 from .reverb_errors import *
 from .reverb_kernel import *
@@ -73,115 +74,151 @@ def stop_subprocess(sub: subprocess.Popen = None):
             "You try to stop the process with a None subprocess! By default the subprocess is reverb.SERVER_PROCESS, set it to the server process before run it again if args is let by default.")
 
 
-class SyncVar:
+class SyncVar(Generic[T]):
     """
-    Simple class that trigger a hook when the value changes and syncs var between all clients
+    A simple class that manage the value of synchronous variable
     """
-
-    def __init__(self, default=None, on_changed: list[staticmethod] = None):
+    def __init__(self, default: T, on_changed: list[Callable[[T, T], None]] = None):
         """
-        :param default: The value
-        :param on_changed: List of methode that will be trigger if the value that will be set changes
+        :param default: The default value
+        :param on_changed: A list of callable function that are called when the value changed.
         """
         if on_changed is None:
             on_changed = []
-        self.on_changed = on_changed
-        self.value = default
-        self.has_changed = False
+        self.on_changed: list[Callable[[T, T], None]] = on_changed
+        self._value: T = default
 
-    def get(self, val_if_not_found=None, get_only_if_change=False) -> object:
+    @property
+    def value(self) -> T:
         """
-        Get the value
-        :param val_if_not_found: Default value that will be return if the value is None
-        :param get_only_if_change: Will return None if the value is not previously change
-        (Careful it is not really sync, it is just for Reverb)
-        :return: The value
+        :return: Get the value.
         """
-        if get_only_if_change and not self.has_changed:
-            return None
-        return self.value if self.value else val_if_not_found
+        return self._value
 
-    def set(self, val):
+    @value.setter
+    def value(self, new_value: T):
         """
-        Set a value
+        Set the value
+        :param new_value: the new value
+        """
+        if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+
+            if self.check_if_json_serializable(new_value):
+                if new_value != self._value:
+                    old = self._value
+                    self._value = new_value
+
+                    for func in self.on_changed:
+                        func(old, self._value)
+
+            else:
+                warnings.warn(f"You tried to set a type that is not json serializable! {new_value=} actual_val={self.value=}")
+        else:
+            warnings.warn(f"You are trying to set the value of {self.__repr__()} on a 'Client' Side !")
+
+    @staticmethod
+    def check_if_json_serializable(val) -> bool:
+        """
+        Check if it can be json serializable
         :param val: The value
+        :return: True if serializable
         """
-        old = self.value
-        self.value = val
-        if old != val:
-            self.has_changed = True
-            for func in self.on_changed:
-                func(old, val)
-
-
-def check_if_json_serializable(*args: SyncVar):
-    for arg in args:
         try:
-            json.dumps(arg)
+            json.dumps(val)
+            return True
         except (TypeError, OverflowError):
-            raise Exception(
-                f"The arg: {arg} is not serializable ! It has to be serializable by JSON to be agree as a reverb_args.")
+            return False
 
+    def __repr__(self):
+        return f"SyncVar[{type(self._value).__name__}](value={self._value})"
 
+    def __str__(self):
+        return self.__repr__()
+
+print(SyncVar("This is an amazing SyncVar!"))
 class ReverbObject:
     """
     - Base class of all object connected to the Network
     """
 
-    def __init__(self, *reverb_args: SyncVar, uid: str = "Unknown", belonging_membership: int = None):
+    def __init__(self, init_args: list[Any], sync_vars: dict[str, SyncVar] = None, uid: str = "Unknown", belonging_membership: int = None):
         """
-        :param reverb_args: All the custom vars
+        :param init_args: A list containing all the value needed to instantiate the constructor. Values need to be json serializable!
+        :param sync_vars: A dict containing the name of the attribute of the SyncVar and his associate SyncVar
         :param uid: The uid of the object, let it on None if you are not sure of what you're doing here
         :param belonging_membership: This refers to the port of a client. With this you can know if the RO is from a local instance or not. Let it on None if you're not sure what you're doing here
         """
+        if sync_vars is None:
+            sync_vars = {}
+
+        if init_args is None:
+            init_args = []
+
+        self.init_args = init_args
         self.belonging_membership = belonging_membership
-        self.reverb_args = reverb_args
+        self.sync_vars = sync_vars
+        self._modified_sync_vars: dict[str, SyncVar] = self.sync_vars.copy()
+
+        # Add the default func only if on 'Server' Side
+        if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
+            for name, sv in self.sync_vars.items():
+                func = lambda old, new, name=name, sv=sv: self._on_sv_modified(name, sv)
+                sv.on_changed.append(func)
+
         self.uid: str = uid
         self.is_alive = True
         self.type = self.__class__.__name__
         self.is_initialized = False
 
-    def get_sync_vars(self, get_value=False, get_only_if_changed=True) -> dict[str, SyncVar | object]:
+
+    def _on_sv_modified(self, name, sv):
+        self._modified_sync_vars[name] = sv
+
+    def get_sync_vars(self, get_value=False, get_only_if_changed=True, reset_changed_sv=True) -> dict[str, SyncVar | T]:
         """
-        List all SyncVars initialized into the ReverbObject
+        List all SyncVars initialized into the ReverbObject.
         :param get_value: Will get the value of the SyncVar if True else will return the object
         :param get_only_if_changed: Get the value only if changed
-        :return: A dict of all SyncVars or val of the SyncVar by their name
+        :param reset_changed_sv: Reset the dict _modified_sync_vars to {} after getting.
+        :return: A dict of all SyncVars or val of the SyncVar by their name.
         """
-        sync_vars = {}
-        for key, arg in dict(zip(list(self.__dict__.keys())[:len(self.reverb_args)],
-                                 list(self.__dict__.values())[:len(self.reverb_args)])).items():
-            if isinstance(arg, SyncVar):
-                val = (arg.get(get_only_if_changed) if get_value else arg)
-                if get_only_if_changed:
-                    if arg.has_changed:
-                        sync_vars[key] = val
-                else:
-                    sync_vars[key] = val
-                if get_only_if_changed:
-                    arg.has_changed = False
-        return sync_vars
+        ret = {}
+        if get_only_if_changed:
+            ret = {name: sv.value if get_value else sv for name, sv in self._modified_sync_vars.items()}
+        else:
+            ret = {name: sv.value if get_value else sv for name, sv in self.sync_vars.items()}
 
-    def pack(self, only_sync_vars) -> list[object]:
+        if reset_changed_sv:
+            self._modified_sync_vars = {}
+        return ret
+
+    def pack(self, only_sync_vars) -> dict[str, type | str | SyncVar]:
         """
-        :param only_sync_vars: If True, it does not return a type + belonging_membership but just sync_vars
-        :return: A dict of all necessary args that are linked between the server and the clients by their name in the class
+        :param only_sync_vars: If True, return only a dict containing value of SyncVars, else return in addition the type and the belonging_membership
+        :return: A dict of all necessary args that are linked between the server and the clients by their name
         """
-        sync_vars = self.get_sync_vars(get_value=True, get_only_if_changed=only_sync_vars)
-        check_if_json_serializable(*[sync_vars])
 
-        # If not init yet: send the type and the belonging_membership to construct the object -> if no sync vars pack nothing ->
-        return ([self.type, self.belonging_membership] if not only_sync_vars else []) + [sync_vars]
+        sync_vars: dict[str, dict[str, Any]] = {"sync_vars": self.get_sync_vars(get_value=True, get_only_if_changed=True)}
+        ret = sync_vars
+        if not only_sync_vars:
+            ret = {"type": self.type, "belonging_membership": self.belonging_membership, "init_args": self.init_args} | sync_vars
+        return ret
 
-    def sync(self, reverb_args: dict[str, SyncVar]):
+    def sync(self, sync_vars: dict[str, Any]):
         """
         - Call on the 'CLIENT' side to sync new ro data
-        :param reverb_args: List of args to be updated
+        :param sync_vars: Dict of the name of the attribute and his value. The attribute needs to be a SyncVar.
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.CLIENT:
-            for key, val in reverb_args.items():
-                getattr(self, key).set(val)
-            self.reverb_args = list(reverb_args.values())
+            for name, val in sync_vars.items():
+                if hasattr(self, name):
+                    attr: SyncVar | Any = self.__getattribute__(name)
+                    if isinstance(attr, SyncVar):
+                        attr._value = val
+                    else:
+                        raise TypeError(f"The attribute {name=} in {self} is not a SyncVar!")
+                else:
+                    raise AttributeError(f"The attribute {name=} is not found in {self}")
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE.name)
 
@@ -258,9 +295,12 @@ class ReverbObject:
         - Call when the object is removing from the 'SERVER' side
         """
 
+    def __repr__(self):
+        return f"ReverbObject(type={self.type}, uid={self.uid}, bm={self.belonging_membership}) of {len(self.sync_vars)} SyncVars"
+
     def __del__(self):
         if VERBOSE == 2:
-            ReverbObject.print_object(f"Destroying the object {self.uid=}")
+            ReverbObject.print_object(f"Destroying the object {self}")
 
 
 class ReverbManager:
@@ -270,7 +310,7 @@ class ReverbManager:
     """
     REVERB_SIDE: ReverbSide = None
     REVERB_CONNECTION: Client | Server = None  # Client, or Server
-    REVERB_OBJECTS: dict[str, ReverbObject] = {}
+    REVERB_OBJECTS: dict[str, ReverbObject | str] = {}
     REVERB_OBJECT_REGISTRY = {"ReverbObject": ReverbObject}  # Register all type
     ADMIN_KEY = random.randint(1000, 10000)
     ADMINS = []
@@ -391,18 +431,16 @@ class ReverbManager:
         - Sync value from 'SERVER' to 'CLIENT' side
         """
         if ReverbManager.REVERB_SIDE == ReverbSide.SERVER:
-            ros = {}
-            does_something_changed = False
+            ros: dict[str, Any] = {}
             # Avoiding: "RuntimeError: dictionary changed size during iteration"
             for uid, ro in list(ReverbManager.REVERB_OBJECTS.items()):
-                if ro != "DESTROYED":
-                    pack = ro.pack(only_sync_vars=ro.is_initialized)
-                    if pack and pack != [{}]:
+                if ro != "DESTROYED": # If the RO is not destroyed
+                    pack = ro.pack(only_sync_vars=ro.is_initialized) # Get bm and type if not initialized
+                    if pack != {}:
                         ros[uid] = pack
-                        does_something_changed = True
                     if not ro.is_initialized:
                         ro.is_initialized = True
-            if does_something_changed:
+            if ros != {}:
                 ReverbManager.REVERB_CONNECTION.send_to_all("server_sync", ros)
         else:
             raise ReverbWrongSideError(ReverbManager.REVERB_SIDE)
@@ -483,7 +521,7 @@ class ReverbManager:
             raise ReverbObjectAlreadyExistError(ro)
         if VERBOSE == 2:
             ReverbManager.print_manager(
-                f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}' side with uid={ro.uid}")
+                f"New ReverbObject: {ro} add into '{ReverbManager.REVERB_SIDE.name}'")
 
     @staticmethod
     def remove_reverb_object(uid: str):
@@ -528,34 +566,50 @@ class ReverbManager:
 
     @staticmethod
     @client_event_registry.on_event("server_sync")
-    def on_server_sync(clt: socket.socket, ros: dict[str, list[int | str | dict[str, object]]], *args):
+    def on_server_sync(clt: socket.socket, ros: dict[str, int | str | dict[str, Any]], *args):
         """
         - Called on the 'Client' side
         - Called when the server syncs the state of ReverbObject with clients
         :param clt: The client socket
-        :param ros: Dict[uids: list[list(values)]]
+        :param ros: Dict[uids: Dict[name, val]]
         """
         for uid, ro_data in ros.items():
-
-            ro: ReverbObject = None
-
             try:  # try to get a reverb_object
                 ro = ReverbManager.get_reverb_object(uid)
-                ro_data = ro_data[0]
             except ReverbObjectNotFoundError:  # create a new one
-                t: str = ro_data[0]  # Type
+                if VERBOSE == 2:
+                    ReverbManager.print_manager(f"The ReverbObject: {uid=} is not found!\n"
+                                                f"Try to create this object with: {ro_data=}")
+                if ro_data.get("type") is not None:
+                    t: str = ro_data["type"] # Type
+                else:
+                    raise ValueError(f"The ro_data doesnt contain \"type\". {ro_data=}")
+
+                if ro_data.get("belonging_membership") is not None:
+                    bm: int = ro_data["belonging_membership"]
+                else:
+                    raise ValueError(f"The ro_data doesnt contain \"belonging_membership\". {ro_data=}")
+
+                if ro_data.get("init_args") is not None:
+                    init_args: list[Any] = ro_data["init_args"]
+                else:
+                    raise ValueError(f"The ro_data doesnt contain \"init_args\". {ro_data=}")
+
                 cls = ReverbManager.get_cls_by_type_name(t)  # Class
-                args = list(ro_data[2].values())  # arguments
+
 
                 try:
-                    ro = cls(*args, belonging_membership=ro_data[1])
+                    ro = cls(*init_args,  belonging_membership=bm)
                 except TypeError:
                     raise TypeError(
                         f"Not enough param passed! You try to construct {cls} but those elements are passed {args}, {ro_data}")
                 ro.uid = uid
                 ReverbManager.add_new_reverb_object(ro)
-                ro_data = ro_data[2]
-            ro.sync(ro_data)
+
+            if ro_data.get("sync_vars") is not None:
+                ro.sync(ro_data["sync_vars"])
+            else:
+                raise ValueError(f"The ro_data doesnt contain \"sync_vars\". {ro_data=}")
 
     @staticmethod
     @server_event_registry.on_event("calling_server_computing")
@@ -574,8 +628,8 @@ class ReverbManager:
                 return
         except ReverbObjectNotFoundError:
             warn(f"You try to compute on the server with a uid not found {uid=}.\n"
-                 f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast! or just because the uid is real2"
-                 f"ly not found!")
+                 f"This may occur because the ro was removed and the syncing between the client and the server is not enough fast!"
+                 f"\nOr just because the uid is not found!")
             return
 
         try:
