@@ -6,7 +6,6 @@ import socket
 import struct
 import sys
 import threading
-import time
 from io import StringIO
 from json import JSONDecodeError
 from warnings import warn
@@ -15,21 +14,25 @@ from colorama import Fore, Back, Style
 
 
 class Tee:
-    """Store the console"""
     ANSI_ESCAPE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
     def __init__(self, *streams, log_buffer=None):
-        self.streams = streams
+        # fallback safe streams
+        self.streams = [s for s in streams if s is not None]
         self.log_buffer = log_buffer or StringIO()
         self._buffer = ""
 
     def write(self, data):
         for s in self.streams:
-            s.write(data)
-            s.flush()
-        clean_data = Tee.ANSI_ESCAPE.sub('', data)
+            try:
+                s.write(data)
+                s.flush()
+            except Exception:
+                pass
 
+        clean_data = Tee.ANSI_ESCAPE.sub('', data)
         self._buffer += clean_data
+
         while '\n' in self._buffer:
             line, self._buffer = self._buffer.split('\n', 1)
             timestamp = datetime.datetime.now().strftime('%H:%M:%S:%f')
@@ -37,18 +40,21 @@ class Tee:
             self.log_buffer.flush()
 
     def flush(self):
-        # Pour finir la dernière ligne si pas de \n
         if self._buffer:
             timestamp = datetime.datetime.now().strftime('%H:%M:%S:%f')
             self.log_buffer.write(f"[{timestamp}] | {self._buffer}\n")
-            self.log_buffer.flush()
             self._buffer = ""
+
         for s in self.streams:
-            s.flush()
+            try:
+                s.flush()
+            except Exception:
+                pass
 
 
 # Storing output into a buffer
 log_buffer = StringIO()
+
 sys.stdout = Tee(sys.__stdout__, log_buffer=log_buffer)
 sys.stderr = Tee(sys.__stderr__, log_buffer=log_buffer)
 
@@ -98,7 +104,6 @@ class EventRegistry:
                 funcs.remove(func)
                 return True
         return False
-
 
     def on_event(self, event_name):
         """
@@ -153,6 +158,7 @@ class EventRegistry:
 
 client_event_registry = EventRegistry()
 server_event_registry = EventRegistry()
+
 
 class Packet:
     """
@@ -236,6 +242,7 @@ class Client:
             except TimeoutError:
                 Client.print_client("Connexion TimeOut !")
         return False
+
     def listen(self):
         """
         Thread that listens for new content from the server
