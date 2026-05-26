@@ -27,7 +27,7 @@ class Tee:
             try:
                 s.write(data)
                 s.flush()
-            except Exception:
+            except:
                 pass
 
         clean_data = Tee.ANSI_ESCAPE.sub('', data)
